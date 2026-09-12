@@ -48,6 +48,41 @@ the working directory is the workspace peasant works *on*. A project `.env` can
 still pin a model or provider for work done there, and a real environment
 variable beats both.
 
+### Using it on another repository
+
+peasant works on whatever directory it is started in, so there is nothing to
+set up per project:
+
+```sh
+cd ~/some/other/repo
+node /path/to/peasant/bin/peasant.js
+```
+
+For a shorter command, `peasant` is declared as a bin, so either of these works:
+
+```sh
+cd /path/to/peasant && npm link                      # puts `peasant` on PATH
+alias peasant='node /path/to/peasant/bin/peasant.js' # or just this
+```
+
+**Check what a repository costs you before settling in.** `peasant doctor` in
+that directory reports the fixed per-turn cost, which includes any context file
+it found:
+
+```
+~2680 tokens before anything is said (7 tool schemas + system prompt), resent on every turn
+  including 6661 chars from /some/other/repo/AGENTS.md
+```
+
+That example is real, and 2,680 tokens is a third of Groq's per-minute budget
+spent before you have said anything. Two ways out, if turns start stalling:
+put a provider with headroom first, or give peasant a shorter file of its own —
+`PEASANT.md` wins over `AGENTS.md`, so the long one can stay for other tools.
+
+```sh
+PEASANT_PROVIDERS=mistral,groq peasant        # 625,000 tokens/minute, measured
+```
+
 ## Commands
 
 ```
@@ -121,8 +156,14 @@ of the repository it is in beats any amount of prompt engineering in the
 abstract.
 
 It is capped at 8,000 characters and the session header states the size, because
-all of it is resent on every turn. `CLAUDE.md` is deliberately not read — it is
-addressed to a different agent with different tools.
+all of it is resent on every turn — see "Using it on another repository" above
+for what that costs in practice.
+
+`CLAUDE.md` is deliberately not read: it is addressed to a different agent with
+different tools, and following instructions written for someone else is worse
+than having none. Where a repository symlinks `CLAUDE.md` to `AGENTS.md` the
+content is shared anyway, which is fine — the rule is about not *assuming* one
+file speaks for another.
 
 ## Commands of your own
 
