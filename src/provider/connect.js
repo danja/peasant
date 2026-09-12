@@ -49,7 +49,16 @@ export async function connect(env, { signal, onProgress = () => {} } = {}) {
         config.model = selectModel(config.profile, ids, null);
         config.contextWindow = windowOf(details, config.model);
       }
-      clients.push(new OpenAICompatClient(config));
+      // The same client, not a new one built from the same config.
+      //
+      // Constructing a second one discarded whatever the first had learned
+      // from listing models. As it happens Groq's /models carries no
+      // x-ratelimit-* headers, so today nothing is lost there -- but a provider
+      // that does send them would have had them thrown away, and throwing away
+      // measured state is a bug whether or not it currently costs anything.
+      // The client reads `config` by reference, so the model set just above is
+      // already visible to it.
+      clients.push(client);
     } catch (e) {
       // One provider being unreachable or misconfigured must not stop the
       // others: that is the whole point of having several.

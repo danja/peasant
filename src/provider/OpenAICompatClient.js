@@ -26,6 +26,10 @@ export class ProviderError extends Error {
   // Would a different provider answer differently?
   get retryable() { return this.kind !== 'bad-request'; }
 
+  // Would the *same* request, sent again unchanged, ever succeed here? A size
+  // refusal says no, however long you wait.
+  get tooLarge() { return this.kind === 'too-large'; }
+
   // Is this provider worth asking again this session? A billing or credential
   // problem is not going to resolve itself in the next few seconds.
   get permanent() { return this.kind === 'provider-unavailable'; }
@@ -44,6 +48,21 @@ export function classify(status) {
   if (status === 429) return 'rate-limit';
   if (status === 401 || status === 402 || status === 403) return 'provider-unavailable';
   if (status === 408 || (status >= 500 && status <= 599)) return 'server-error';
+  // 413 is "this request is too big for me", and it is emphatically not our
+  // request being malformed: Groq answers a per-minute overflow with
+  //
+  //   413  Request too large for model ... on tokens per minute (TPM):
+  //        Limit 8000, Requested 13266
+  //
+  // which is a provider with 8,000 tokens a minute declining something a
+  // provider with 625,000 would answer without noticing. Classified as
+  // bad-request it stopped the router rotating and surfaced to the user, which
+  // is the one outcome that helps nobody.
+  //
+  // Distinct from rate-limit because it is a size problem rather than a timing
+  // one: waiting does not help, asking someone larger does, and there is no
+  // reason to put this provider in a cooldown it did not ask for.
+  if (status === 413) return 'too-large';
   return 'bad-request';
 }
 

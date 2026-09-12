@@ -137,6 +137,25 @@ test('waiting past the reset makes the request allowed again', () => {
   assert.equal(rl.check(5000).allowed, true, 'the window has rolled');
 });
 
+test('a rolled window restores the budget but does not forget the limit', () => {
+  // The bug this pins: an expired window made check() skip the limit
+  // altogether, so a request larger than the provider's *whole* budget was
+  // sent again and again. Groq reports `reset-tokens: 1ms` on the very
+  // response that states the limit, so the window had almost always rolled by
+  // the time anyone asked.
+  const c = clock();
+  const rl = new RateLimiter(groq, { now: c.now });
+  rl.observe({ ...GROQ_HEADERS, 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '8000', 'x-ratelimit-reset-tokens': '1ms' });
+  c.advance(50);
+
+  const big = rl.check(13_266);
+  assert.equal(big.allowed, false, 'it can never fit, whatever the window says');
+  assert.equal(big.waitMs, Infinity);
+  assert.match(big.reason, /the whole tokens limit is 8000/);
+
+  assert.equal(rl.check(1000).allowed, true, 'and the restored budget is usable');
+});
+
 test('a request larger than the whole limit can never be allowed', () => {
   // Waiting does not help; the caller has to send less. Saying "wait 30s"
   // here would loop forever.
@@ -159,7 +178,8 @@ test('a limit of zero is exhausted now, not impossible forever', () => {
   assert.equal(r.allowed, false);
   assert.ok(Number.isFinite(r.waitMs), 'waiting must be able to help');
   c.advance(60_001);
-  assert.equal(rl.check(10).allowed, true, 'the inferred window rolls');
+  assert.equal(rl.check(10).allowed, true,
+    'the window rolls, and a zero limit is a symptom rather than a fact to carry forward');
 });
 
 test('the request budget is checked too, not only tokens', () => {

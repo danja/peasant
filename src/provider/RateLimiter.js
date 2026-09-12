@@ -158,8 +158,20 @@ export class RateLimiter {
       ['tokens', this.#tokens, estimatedTokens],
       ['requests', this.#requests, 1],
     ]) {
-      if (w.remaining === null || expired(w)) continue; // nothing known, or the window has rolled
-      if (w.remaining >= need) continue;
+      // A rolled window restores `remaining` to `limit`; it does not make the
+      // limit unknown. Skipping the check entirely when the window had expired
+      // meant a request larger than the provider's *whole* budget was sent
+      // again and again -- and Groq reports `reset-tokens: 1ms` on the very
+      // response that states the limit, so the window had almost always rolled
+      // by the time anyone asked.
+      //
+      // A limit of *zero* is the exception, and Mistral has sent one. It is a
+      // symptom rather than a durable fact, so it does not survive the roll:
+      // carrying it forward would pin the provider shut for the session on the
+      // strength of one odd response.
+      const available = expired(w) ? (w.limit > 0 ? w.limit : null) : w.remaining;
+      if (available === null) continue; // nothing known
+      if (available >= need) continue;
 
       // Not enough left. If the limit itself is smaller than this request, no
       // amount of waiting helps and the caller has to shrink the request.
@@ -178,7 +190,7 @@ export class RateLimiter {
       return {
         allowed: false,
         waitMs: w.resetAt === null ? 1000 : Math.max(0, w.resetAt - now),
-        reason: `${w.remaining} ${name} left, need ${need}`,
+        reason: `${available} ${name} left, need ${need}`,
       };
     }
 

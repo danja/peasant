@@ -59,6 +59,29 @@ test('rotates on a 5xx', async (t) => {
   assert.equal((await new Router([clientA, clientB], { sleep: noSleep }).complete(ask)).content, 'from beta');
 });
 
+test('rotates past a provider that says the request is too large for it', async (t) => {
+  // The bug this pins, found by running peasant on a real repository: Groq
+  // answers a per-minute overflow with 413, which was classified as a bad
+  // request, so the router refused to rotate and the user saw a rate limit
+  // error while five other providers sat unused.
+  const { a, b, clientA, clientB } = await providerPair(t);
+  a.respond({ status: 413, json: { error: { message: 'Request too large: Limit 8000, Requested 13266' } } });
+  b.respond({ json: defaultCompletion('from beta') });
+
+  const r = await new Router([clientA, clientB], { sleep: noSleep }).complete(ask);
+  assert.equal(r.content, 'from beta');
+});
+
+test('a provider too small for one request is not retired from the session', async (t) => {
+  // It is not broken and it is not out of quota; the next request may be small.
+  const { a, b, clientA, clientB } = await providerPair(t);
+  a.respond({ status: 413, json: { error: { message: 'too large' } } });
+  b.respond({ json: defaultCompletion('from beta') });
+  const router = new Router([clientA, clientB], { sleep: noSleep });
+  await router.complete(ask);
+  assert.equal(router.retired.has('alpha'), false);
+});
+
 test('does not rotate on a 400 -- another provider would say the same', async (t) => {
   const { b, a, clientA, clientB } = await providerPair(t);
   a.respond({ status: 400, json: { error: { message: 'bad request' } } });

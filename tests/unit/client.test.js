@@ -236,6 +236,55 @@ test('401 and 403 are classified the same way', async (t) => {
   });
 });
 
+test('a 413 means this provider is too small, not that the request is wrong', async (t) => {
+  // Groq answers a per-minute overflow with 413, not 429:
+  //   "Request too large ... on tokens per minute (TPM): Limit 8000,
+  //    Requested 13266"
+  // Classified as bad-request it stopped the router rotating and surfaced to
+  // the user -- while a provider with 625,000 tokens a minute was next in line
+  // and would have answered.
+  await withProvider(t, async (client, fake) => {
+    fake.respond({
+      status: 413,
+      headers: {
+        'x-ratelimit-limit-tokens': '8000',
+        'x-ratelimit-remaining-tokens': '8000',
+        'x-ratelimit-reset-tokens': '1ms',
+      },
+      json: { error: { message: 'Request too large for model on tokens per minute (TPM): Limit 8000, Requested 13266' } },
+    });
+    const err = await client.complete(ask).catch((e) => e);
+    assert.equal(err.kind, 'too-large');
+    assert.equal(err.retryable, true, 'a bigger provider would answer');
+    assert.equal(err.permanent, false, 'this provider is fine, just smaller');
+    assert.equal(err.tooLarge, true);
+    assert.match(err.message, /Limit 8000/, "the provider's own explanation must survive");
+  });
+});
+
+test('a 413 teaches the limiter, so the next oversized request is never sent', async (t) => {
+  // The response carries x-ratelimit-* headers, so one refusal is enough: after
+  // it, a request that cannot fit is refused before it costs a round trip.
+  await withProvider(t, async (client, fake) => {
+    assert.equal(client.limiter.check(13_266).allowed, true, 'nothing known yet');
+
+    fake.respond({
+      status: 413,
+      headers: { 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '8000', 'x-ratelimit-reset-tokens': '1ms' },
+      json: { error: { message: 'Request too large' } },
+    });
+    await client.complete(ask).catch(() => {});
+
+    // Deliberately with Groq's real `reset-tokens: 1ms`: the window rolls
+    // immediately, and the limit must survive that.
+    const after = client.limiter.check(13_266);
+    assert.equal(after.allowed, false);
+    assert.equal(after.waitMs, Infinity, 'waiting cannot make a request smaller');
+    assert.match(after.reason, /the whole tokens limit is 8000/);
+    assert.equal(client.limiter.check(1000).allowed, true, 'a smaller request still fits');
+  });
+});
+
 test('a 500 is retryable', async (t) => {
   await withProvider(t, async (client, fake) => {
     fake.respond({ status: 503, json: { error: { message: 'overloaded' } } });

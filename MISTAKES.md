@@ -2,6 +2,47 @@
 
 Newest first. What happened, the root cause, and what now prevents it.
 
+## 2026-09-12 — A rate limit surfaced to the user while five providers sat unused
+
+**What happened.** Running peasant on a real repository, a turn failed with a
+rate-limit message instead of rotating. Six providers were configured and
+rotation was on.
+
+Groq answers a per-minute token overflow with **HTTP 413**, not 429:
+
+```
+413  Request too large for model `openai/gpt-oss-20b` ... on tokens per minute
+     (TPM): Limit 8000, Requested 13266
+```
+
+`classify()` had no case for 413, so it fell through to `bad-request`, whose
+whole meaning is "our request is malformed and every provider will say the
+same". The router therefore refused to rotate — while Mistral, with 625,000
+tokens a minute, was next in line and would have answered without noticing.
+
+**Root cause.** The same one as the Cerebras 402 in Phase 1: a status code
+assigned to the wrong bucket because I reasoned about which codes *ought* to
+appear rather than observing which ones do. Both were found by running against a
+real provider, neither by a test, and both were in code with tests that passed.
+
+**Prevention.** 413 is now its own kind, `too-large`: retryable, because a
+bigger provider answers, but not a rate limit, because waiting does not make a
+request smaller and the provider deserves no cooldown. `tests/unit/router.test.js`
+and `tests/unit/client.test.js` pin both halves.
+
+The 413 response carries `x-ratelimit-*` headers, so one refusal now teaches the
+limiter the real budget and an over-sized request is refused before it costs a
+round trip. That is tested too.
+
+**Also found while diagnosing it.** `connect()` built a second client from the
+same config after listing models, discarding whatever the first had learned.
+Groq's `/models` happens to carry no rate-limit headers so nothing was lost
+today, but throwing away measured state is a bug whether or not it currently
+costs anything. And the comment I first wrote for the fix claimed the limiter
+*did* know the budget by that point — a false statement about the system, in a
+project whose rules are mostly about not making those. Corrected before it
+landed.
+
 ## 2026-09-12 — A documented figure written into the house rules as if it were a fact
 
 **What happened.** `CLAUDE.md` stated, as part of the project's specification,

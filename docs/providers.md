@@ -60,6 +60,30 @@ despite being 78× larger. Mistral alone reports what a query cost.
 **OpenRouter and Cerebras publish nothing.** Their budget is discovered only
 from 429s.
 
+## An overflow is not always a 429
+
+Groq answers a per-minute **token** overflow with **HTTP 413**, reserving 429
+for a request-rate overflow:
+
+```
+HTTP 413
+retry-after: 31
+x-ratelimit-limit-tokens: 8000
+x-ratelimit-remaining-tokens: 8000
+Request too large for model ... on tokens per minute (TPM): Limit 8000, Requested 13266
+```
+
+Note `remaining-tokens: 8000` — the budget is *full*. Nothing was consumed,
+because nothing was sent. This is a size refusal, not a rate refusal, and the
+two want opposite responses: waiting fixes a rate refusal and does nothing at
+all for a size one. peasant classifies 413 as `too-large` — rotate to a bigger
+provider immediately, do not put this one in a cooldown it did not ask for.
+
+The headers on that response are how the limiter learns the real budget: Groq's
+`/models` carries no `x-ratelimit-*` at all, so before the first completion the
+budget is genuinely unknown. One 413 is enough, after which an over-sized
+request is refused before it costs a round trip.
+
 ## What a 429 looks like
 
 Observed on Mistral later the same day, after the morning's probe reported
