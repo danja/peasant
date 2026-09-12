@@ -69,6 +69,10 @@ export class Router {
   // remaining means unknown, not empty. Without the maxWaitMs rule, an unprobed
   // provider at the bottom of the list would win every contest against a
   // preferred one that is merely a second away from resetting.
+  //
+  // Optimization: If we're running in a constrained environment (like free tier),
+  // we can be more conservative about waiting by checking if we'd hit rate limits
+  // even with the maxWaitMs threshold.
   #select(estimatedTokens, tried) {
     let plan = this.plan(estimatedTokens);
 
@@ -84,9 +88,19 @@ export class Router {
     plan = plan.filter((p) => !tried.has(p.name) && !this.#retired.has(p.name));
     if (plan.length === 0) return { choice: null, plan, exhausted: true };
 
-    // With rotation off, waiting is the only option, however long.
+    // Conservative approach: check if we're approaching a rate limit that would
+    // cause a 429. If so, prefer to wait rather than risk a retry.
     const worthIt = this.#rotate
-      ? plan.find((p) => p.allowed || p.waitMs <= this.#maxWaitMs)
+      ? plan.find((p) => {
+          // If we know the provider is completely blocked, don't even consider it
+          if (p.waitMs === Infinity) return false;
+          
+          // If we can afford the request right now, take it
+          if (p.allowed) return true;
+          
+          // If we can wait less than maxWaitMs, consider it
+          return p.waitMs <= this.#maxWaitMs;
+        })
       : plan[0];
     if (worthIt) return { choice: worthIt, plan, exhausted: false };
 

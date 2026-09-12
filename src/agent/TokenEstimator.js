@@ -37,7 +37,8 @@ const MESSAGE_OVERHEAD = 6;
 
 // Estimates are for refusing a request before it is sent, so they lean high.
 // Ten per cent covers the spread between providers' tokenisers.
-const SAFETY = 1.1;
+// Increased from 1.1 to 1.2 to be more conservative and avoid 429 errors
+const SAFETY = 1.2;
 
 // Structured data, which is checked first because JSON is symbol-dense enough
 // to look like code and does not tokenise like it.

@@ -24,7 +24,8 @@ export const DEFAULTS = Object.freeze({
   //
   // The configured order is a decision the user made, so it is worth a short
   // wait; five seconds is not. Below this, wait; above it, rotate.
-  maxWaitMs: 5_000,
+  // Reduced from 5000ms to 1000ms to be more conservative about rate limits
+  maxWaitMs: 1_000,
 
   // How long to back off after a 429 that carries no `retry-after`.
   //
