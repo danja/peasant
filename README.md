@@ -199,6 +199,17 @@ including the table for `~/.claude.json` → peasant.
 Only tools are implemented. Resources and prompts are absent rather than
 half-present. See [`docs/mcp.md`](docs/mcp.md).
 
+## What it will and will not touch
+
+`read`, `write`, `edit`, `ls`, `glob` and `grep` are confined to the directory
+peasant was started in, symlinks resolved, and refuse anything outside it.
+Anything that changes something asks first unless you pass `--allow-all`.
+
+`bash` is the exception, and deliberately: it runs with the workspace as its
+working directory but can reach anywhere you can. That is what a shell is. The
+confinement is a guard against accident rather than a sandbox, and the
+permission prompt is the real control.
+
 ## Search
 
 `grep` uses a ripgrep already on your PATH, and a pure-JavaScript engine

@@ -2,6 +2,37 @@
 
 Newest first. What happened, the root cause, and what now prevents it.
 
+## 2026-09-12 — Somebody else's .env stopped peasant starting
+
+**What happened.** peasant refused to start, reporting that it could not read
+the keys, with a raw stack trace. The keys were fine. A `.env` in the working
+directory could not be parsed, `load()` threw, and startup died before anything
+could report it properly.
+
+Any `.env` written for a normal application does this: `export FOO`, a
+multi-line value, command substitution. None of it is peasant's dialect.
+
+**Root cause.** "No inline fallbacks" applied to the wrong file. The rule is
+right for *peasant's own* configuration, where a malformed line means a setting
+silently missing. It is wrong for a file that belongs to the project being
+worked on, which peasant reads opportunistically and has no business
+understanding. Whose file it is decides how strict to be about it, and I had not
+made that distinction.
+
+The stated principle was always "named, not silently skipped". Naming it is the
+part that matters; being fatal was never the point, and `loadServers` for
+`mcp.json` had already got this right by collecting problems and continuing.
+
+**Prevention.** `load()` now reports an unreadable file and skips it, keeping
+everything the other files provided. `parse()` is still strict, because that is
+where the message is useful. The problems are shown at startup and by `peasant
+doctor`. Tests in `tests/unit/env.test.js` cover a bad file before and after a
+good one.
+
+**Also.** The stack trace appeared because `load()` was called outside the
+top-level try in `bin/peasant.js`, so a configuration error was reported as an
+internal fault. Moved inside.
+
 ## 2026-09-12 — A rate limit surfaced to the user while five providers sat unused
 
 **What happened.** Running peasant on a real repository, a turn failed with a

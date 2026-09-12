@@ -1,7 +1,7 @@
 // The commands that answer "what is peasant going to do", without doing it.
 
 import fs from 'node:fs';
-import { configFiles, sourceOf } from '../config/Env.js';
+import { configFiles, sourceOf, problemsOf } from '../config/Env.js';
 import { PROFILES } from '../provider/ProfileRegistry.js';
 import { engineName } from '../tools/search/index.js';
 import { build } from './context.js';
@@ -87,6 +87,7 @@ export async function doctor(term, env, pkg, { signal } = {}) {
   for (const file of configFiles()) {
     term.line(term.paint(`  ${fs.existsSync(file) ? 'found  ' : 'absent '} ${file}`, 'grey'));
   }
+  for (const problem of problemsOf(env)) term.line(term.paint(`  ${problem}`, 'yellow'));
   // Only the keys peasant reads: the environment is full of other tools'
   // tokens, and listing them is noise at best.
   const keyVars = PROFILES.map((p) => p.keyVar).filter((k) => (env[k] ?? '') !== '');

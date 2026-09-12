@@ -5,6 +5,13 @@ Guidance for Claude Code (claude.ai/code) when working in this repository.
 There should be no inline fallbacks, as this leads to indeterminate code. If a value is
 not successfully retrieved from config then that is an error that needs fixing.
 
+**Whose file it is decides how strict to be about it.** That rule is right for
+peasant's own configuration, where a malformed line means a setting silently
+missing. It is wrong for a file belonging to the project being worked on — a
+`./.env` full of shell peasant has no business understanding — where refusing to
+start throws away good configuration from elsewhere. Report and skip those. The
+principle is "named, not silently skipped"; being fatal was never the point.
+
 ## Why this project exists
 
 Peasant is an LLM coding harness CLI — the same shape as OpenCode, Claude Code and

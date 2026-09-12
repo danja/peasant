@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertRunnable } from '../src/compat/Preflight.js';
-import { load } from '../src/config/Env.js';
+import { load, problemsOf } from '../src/config/Env.js';
 import { Terminal } from '../src/ui/Terminal.js';
 import { ask } from '../src/cli/ask.js';
 import { run } from '../src/cli/run.js';
@@ -55,6 +55,11 @@ async function main(argv) {
   assertRunnable();
 
   const env = load();
+  // Named rather than fatal: usually somebody else's project .env, in a dialect
+  // peasant does not speak and has no business speaking.
+  for (const problem of problemsOf(env)) {
+    term.error(term.paint(`  ${problem}`, 'yellow'));
+  }
   const allowAll = argv.includes('--allow-all');
   const resumeAt = argv.indexOf('--resume');
   // `--resume` alone means the latest here; `--resume <id>` names one. The id

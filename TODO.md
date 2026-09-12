@@ -144,6 +144,19 @@ profile fields exist.
       `notifications/tools/list_changed` is ignored.
 - [ ] NVIDIA and Together provider profiles — a file each, when keys exist.
 
+## Known limitations worth stating
+
+- [ ] **`bash` is not workspace-confined the way the file tools are.** `read`,
+      `write`, `edit`, `ls`, `glob` and `grep` all resolve through
+      `src/tools/paths.js` and refuse anything outside the working directory.
+      `bash` runs with `cwd` set to the workspace but can write anywhere the
+      user can, so `--allow-all` is genuinely "allow all". That is the honest
+      behaviour for a shell and matching harnesses do the same, but it is worth
+      being explicit: the confinement is a guard against accident, not a
+      sandbox, and the permission prompt is the real control.
+- [ ] Related: peasant editing its own repository is allowed and worked, but the
+      permission prompt is the only thing between a session and its own source.
+
 ## Housekeeping
 
 - [x] ~~`README.md`~~ — written, every figure taken from the system.

@@ -108,13 +108,33 @@ function expandHome(p, home) {
 // Merges every config file under the real environment, which always wins.
 // Returns a plain object rather than mutating process.env, so a caller can see
 // exactly what came from where and tests do not leak into each other.
+//
+// A file that will not parse is reported and skipped, not fatal. That is a
+// deliberate exception to "no inline fallbacks", and the reason is whose file it
+// is: `./.env` in a working directory usually belongs to the *project being
+// worked on*, not to peasant. It is full of shell that peasant has no business
+// understanding -- `export FOO`, multi-line values, command substitution -- and
+// refusing to start because somebody else's environment file is not in our
+// dialect throws away perfectly good keys from ~/.config/peasant/.env for no
+// reason. Peasant ran into exactly that.
+//
+// The principle was always "named, not silently skipped". Naming it is the part
+// that matters; being fatal was never the point.
 export function load({ files = null, env = process.env, cwd = process.cwd(), home = os.homedir() } = {}) {
   const paths = files ?? configFiles({ env, cwd, home });
   const merged = {};
   const sources = {};
+  const problems = [];
 
   for (const file of paths) {
-    for (const [k, v] of Object.entries(read(file))) {
+    let values;
+    try {
+      values = read(file);
+    } catch (e) {
+      problems.push(`${e.message} — that file was skipped`);
+      continue;
+    }
+    for (const [k, v] of Object.entries(values)) {
       merged[k] = v;
       sources[k] = file;
     }
@@ -124,7 +144,14 @@ export function load({ files = null, env = process.env, cwd = process.cwd(), hom
   }
 
   Object.defineProperty(merged, Symbol.for('peasant.sources'), { value: sources, enumerable: false });
+  Object.defineProperty(merged, Symbol.for('peasant.problems'), { value: problems, enumerable: false });
   return merged;
+}
+
+// Files that could not be read, for the caller to report. Empty is the usual
+// answer; a non-empty one is worth a line of output, not a crash.
+export function problemsOf(values) {
+  return values[Symbol.for('peasant.problems')] ?? [];
 }
 
 // Where each setting came from -- for `peasant doctor`, because "it works in

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { parse, read, load, require_, redact, configFiles, sourceOf } from '../../src/config/Env.js';
+import { parse, read, load, require_, redact, configFiles, sourceOf, problemsOf } from '../../src/config/Env.js';
 
 test('parses plain assignments in file order', () => {
   assert.deepEqual(parse('A=1\nB=two\n'), { A: '1', B: 'two' });
@@ -137,6 +137,48 @@ test('sourceOf says where a setting came from', (t) => {
   assert.equal(sourceOf(values, 'FROM_FILE'), f);
   assert.equal(sourceOf(values, 'FROM_ENV'), 'environment');
   assert.equal(sourceOf(values, 'ABSENT'), null);
+});
+
+test('an unreadable file is skipped and named, not fatal', (t) => {
+  // The bug this pins: a `.env` belonging to the *project being worked on* --
+  // full of shell peasant has no business understanding -- took down startup
+  // and threw away perfectly good keys from the user's own config. Whose file
+  // it is decides how strict to be about it.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'peasant-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const good = path.join(dir, 'good.env');
+  const bad = path.join(dir, 'bad.env');
+  fs.writeFileSync(good, 'GROQ_API_KEY=kept\n');
+  fs.writeFileSync(bad, 'GROQ_MODEL=fine\nexport SOMETHING\n');
+
+  const values = load({ files: [good, bad], env: {} });
+  assert.equal(values.GROQ_API_KEY, 'kept', 'the readable file still counts');
+  assert.equal(values.GROQ_MODEL, undefined, 'and the unreadable one contributes nothing');
+
+  const problems = problemsOf(values);
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /bad\.env:2: cannot parse/);
+  assert.match(problems[0], /skipped/);
+});
+
+test('a readable file after an unreadable one is still read', (t) => {
+  // Order matters: giving up at the first bad file would lose the later ones.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'peasant-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(dir, 'a.env'), 'oops no equals\n');
+  fs.writeFileSync(path.join(dir, 'b.env'), 'GROQ_API_KEY=kept\n');
+  const values = load({ files: [path.join(dir, 'a.env'), path.join(dir, 'b.env')], env: {} });
+  assert.equal(values.GROQ_API_KEY, 'kept');
+});
+
+test('nothing wrong means no problems reported', () => {
+  assert.deepEqual(problemsOf(load({ files: [], env: {} })), []);
+});
+
+test('parse itself is still strict, because that is where the error is useful', () => {
+  // load() decides what to do about a bad file; parse() still says exactly
+  // what is wrong with it.
+  assert.throws(() => parse('A=1\nnonsense\n'), /:2: cannot parse/);
 });
 
 test('a missing config file is not an error', () => {
