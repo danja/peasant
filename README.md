@@ -220,8 +220,9 @@ question would give two people different answers.
 
 ## The rules, and what enforces each
 
-Nothing here is enforced by good intentions. 11 guard files, 438 tests, 0
-dependencies.
+Nothing here is enforced by good intentions. Every rule below has a test that
+fails when it is broken, and `npm test` runs them with no network and no
+services.
 
 | Rule | Enforced by |
 |---|---|

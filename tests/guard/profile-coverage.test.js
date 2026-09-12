@@ -40,6 +40,21 @@ test('every profile names its settings in example.env', () => {
   assert.deepEqual(missing, [], `add these to example.env: ${missing.join(', ')}`);
 });
 
+test("example.env's base URLs are the profiles' own", () => {
+  // The names were already bound; the URLs were two copies of the same fact,
+  // and a provider moving its endpoint would have left the documented one
+  // quietly wrong.
+  const wrong = [];
+  for (const p of PROFILES) {
+    const line = new RegExp(`^#?${p.baseUrlVar}=(.*)$`, 'm').exec(exampleEnv);
+    if (!line) { wrong.push(`${p.name}: ${p.baseUrlVar} not documented`); continue; }
+    if (line[1].trim() !== p.baseUrl) {
+      wrong.push(`${p.name}: example.env says ${line[1].trim()}, the profile says ${p.baseUrl}`);
+    }
+  }
+  assert.deepEqual(wrong, []);
+});
+
 test('PEASANT_PROVIDERS in example.env lists only known providers', () => {
   const m = /^PEASANT_PROVIDERS=(.*)$/m.exec(exampleEnv);
   assert.ok(m, 'example.env must set PEASANT_PROVIDERS');

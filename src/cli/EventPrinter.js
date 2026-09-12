@@ -66,7 +66,7 @@ export class EventPrinter {
         this.#render.flush();
         term.clearStatus();
         term.endLine();
-        term.line(term.paint(`  ${ev.name}  ${describe({ name: ev.name }, ev.args)[0] ?? ''}`, 'cyan'));
+        term.line(term.paint(`  ${ev.name}  ${describe(ev.name, ev.args)[0] ?? ''}`, 'cyan'));
         break;
 
       case 'tool-result':

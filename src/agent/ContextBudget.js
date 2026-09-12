@@ -12,9 +12,8 @@
 
 import { DEFAULTS } from '../config/preferences.js';
 
-// Messages at the end of a conversation that are never summarised away. The
-// most recent exchange is what the model is actually working from.
-const KEEP_RECENT = 6;
+// Declared once, in src/config/preferences.js, with the reason for its value.
+const KEEP_RECENT = DEFAULTS.keepRecent;
 
 export class ContextBudget {
   #estimator;

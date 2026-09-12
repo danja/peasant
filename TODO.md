@@ -23,17 +23,23 @@ checks on the target, the floor is `>=22.0.0`, and Phase 1 can start.
       `mistral-code-latest` look purpose-built; evaluate before settling. Check
       whether `groq/compound` is a chat model or an agent wrapper with its own
       tool loop — if the latter it conflicts with ours and must be excluded.
-- [ ] R3: catalogue tool-calling dialect differences, one fixture per case.
-      Started: Groq and Mistral both return a tool call **whole in one delta**
-      (`docs/providers.md`), which is *not* the OpenAI incremental shape the
-      assembler must also handle. Real SSE captures are in
-      `docs/raw/2026-09-12_providers/*.sse`.
-- [ ] R4: read OpenCode, Codex CLI and Claude Code's pre-Bun npm package; write
-      `docs/prior-art.md`. Decide the file-editing strategy there — exact-string
-      replace against diff-apply. Exact-string replace is cheaper in tokens,
-      which matters more here than usual.
+      **Needs a comparison over real tasks, not a probe**: which model is better
+      at this is a judgement about output quality, and guessing from names is
+      how four of six preference lists came to be wrong.
+- [x] ~~R3: catalogue tool-calling dialect differences~~ — both shapes are
+      captured and both are tested. Groq, Mistral and Google send a tool call
+      whole in one delta; OpenRouter and Hugging Face dribble the arguments.
+      `tests/unit/tool-call-assembler.test.js` asserts both remain represented,
+      so half the assembler cannot quietly become untested.
+- [ ] R4: `docs/prior-art.md`. The decision it was meant to inform — exact-string
+      replace against diff-apply — was taken in Phase 2 and is working, with the
+      reasoning recorded in `src/tools/edit.js`. What remains is comparative
+      reading, worth doing when there is a specific question rather than as an
+      exercise.
 - [ ] R5: terminal capability survey on the target — `TERM`, colour depth,
-      unicode width, raw mode behaviour.
+      unicode width, raw mode behaviour. **Needs the target machine.** An
+      interactive session has since run there successfully, so nothing is known
+      to be wrong; this would tell us what is merely working by luck.
 - [x] ~~R6: pure-JS token estimation~~ — done. `bin/probe-tokens.js` measured the
       constants against a live provider; `TokenEstimator` calibrates against
       `usage.prompt_tokens` on every response and settled at 0.90 in a real
@@ -60,19 +66,17 @@ profile fields exist.
       `usage.completion_tokens_details.reasoning_tokens`.
 - [x] Filter non-chat models out of selection — `NON_CHAT` in
       `src/provider/profiles/generic.js`.
-- [ ] **Three of four providers publish no rate-limit headers.** OpenRouter and
-      Cerebras give the limiter nothing; its budget for them is discovered only
-      from 429s. Worth considering a conservative self-imposed default for a
-      provider that reports nothing.
+- [ ] **Five of six providers publish no usable rate-limit headers.** Only Groq
+      states everything; Mistral gives limits without a reset. The rest are
+      discovered from 429s and 413s alone. A conservative self-imposed default
+      for a silent provider would trade a little throughput for far fewer
+      refusals, but any number chosen here would be exactly the kind of
+      unmeasured constant this project refuses elsewhere. Left open deliberately.
 
 ## Design decisions not yet taken
 
-- [ ] **Should the `grep` tool prefer a system `ripgrep`?** ripgrep 15.1.0 runs
-      on the target, so Rust baseline x86-64 binaries are fine there. Peasant
-      must not *ship* a binary, but using one already on PATH breaks no rule and
-      would be much faster than pure JS on a large tree. The cost is two code
-      paths to keep behaviourally identical — and if they diverge, a guard test
-      must be what notices.
+- [x] ~~Should `grep` prefer a system `ripgrep`?~~ — yes, and it does. Two
+      engines bound by `tests/unit/search-parity.test.js`.
 - [x] ~~Whether a local Ollama or llama.cpp is in scope~~ — both have profiles,
       verified against a real Ollama. Still needs a CPU-baseline-safe build on
       the target; untested there.
@@ -84,23 +88,23 @@ profile fields exist.
       perhaps 7% and risks costing more turns than it saves. The real saving
       would be sending a subset — but a task that turns out to need `write`
       after being told it has no `write` is worse than the tokens. Left alone
-      deliberately; revisit with a way to add a tool mid-conversation. — measured, and 78% of
-      the 942-token fixed cost. Worth attacking directly: the descriptions are
-      verbose, and a task that will never write a file does not need `write`,
-      `edit` and `bash` described to it. Sending a subset would be the single
-      largest saving available.
+      deliberately; revisit with a way to add a tool mid-conversation.
 - [x] ~~`session/Store`~~ — done. Append-only JSONL, `--resume`, `sessions`.
 - [x] ~~`peasant run` does not persist anything~~ — it does now.
-- [ ] Nothing prunes old sessions. They are small, but unbounded.
-- [ ] The turn limit (25) and `KEEP_RECENT` (6) are inline constants. They
-      belong in `preferences.js` with the rest.
-- [ ] `EventPrinter` calls `describe()` with a fake `{ name }` object rather
-      than the tool. It works because `describe` only reads `.name`, but it is a
-      seam that will break the first time it needs anything else.
+- [x] ~~Nothing prunes old sessions~~ — `Store.prune()` keeps the newest
+      `PEASANT_KEEP_SESSIONS` (100), run when a session starts.
+- [x] ~~The turn limit and `KEEP_RECENT` were inline constants~~ — both now in
+      `preferences.js` with the reason for their values, tunable as
+      `PEASANT_MAX_TURNS` and `PEASANT_KEEP_RECENT`.
+- [x] ~~`EventPrinter` calls `describe()` with a fake `{ name }` object~~ —
+      `describe()` takes a name now, which is all it ever wanted.
 - [x] ~~The session has no multiline input~~ — a trailing `\` or an unclosed
       ``` fence continues a line.
-- [ ] `/model` would be useful — switching provider or model without restarting.
-- [ ] Multiline input has no way to cancel a half-typed block except Ctrl-C.
+- [x] ~~`/model` would be useful~~ — `/provider <name>` puts one first for the
+      rest of the session, and gives a withdrawn provider another chance.
+      Switching *model* within a provider is still a restart.
+- [x] ~~Multiline input has no way to cancel a half-typed block~~ — Ctrl-C
+      abandons it and returns to the prompt.
 - [x] ~~`bin/peasant.js` is 307 lines~~ — split into `src/cli/`, one file per
       command; the entry point is 99 lines of dispatch.
 - [x] ~~Decide whether `grep` should use a system `ripgrep`~~ — done. It uses one
@@ -123,10 +127,9 @@ profile fields exist.
 - [x] `example-env.test.js` binds every tunable to its documentation, in both
       directions — an undocumented setting and a documented one nothing reads
       both fail.
-- [ ] `tool-schema.test.js` — a tool's advertised schema is the one that
-      validates. Phase 2, with the tools.
-- [ ] Bind `example.env`'s base URLs to the profile defaults. The names are
-      bound; the URLs are still two copies.
+- [x] ~~`tool-schema.test.js`~~ — written in Phase 2 with the tools.
+- [x] ~~Bind `example.env`'s base URLs to the profile defaults~~ — done, in
+      `profile-coverage.test.js`.
 
 ## Phase 5 remainder
 
@@ -135,16 +138,28 @@ profile fields exist.
       file. Capped at 8,000 characters, with the size shown.
 - [x] ~~Custom slash commands~~ — done, `.peasant/commands/*.md`.
 - [ ] Context files are read once at startup. Editing `PEASANT.md` mid-session
-      has no effect until a restart, which will surprise someone.
+      has no effect until a restart, which will surprise someone. `/clear` is
+      the natural place to re-read, since it already rebuilds the system prompt.
 - [x] ~~Per-server `alwaysAllow`~~ — most servers declare `readOnlyHint` on
       nothing, so without it every query prompts.
 - [ ] MCP resources and prompts. Deliberately absent for now rather than
       half-implemented; add them when something needs them.
 - [ ] MCP tools are fetched once at startup. A server sending
       `notifications/tools/list_changed` is ignored.
-- [ ] NVIDIA and Together provider profiles — a file each, when keys exist.
+- [x] ~~NVIDIA and Together provider profiles~~ — written, both `autoEnable:
+      false` and unverified until a key exists to probe them with.
 
 ## Known limitations worth stating
+
+- [ ] **Eliding a tool result makes the model read the file again.** Seen in a
+      Groq-only run on valis: compaction elided three reads, and the model
+      re-read the same three files, paying for them twice. Better than the turn
+      failing, but a model that keeps re-reading what was just elided could
+      loop. Worth either keeping a one-line summary of *what* a tool result
+      contained, or refusing to elide a result the model has not yet responded
+      to.
+
+
 
 - [ ] **`bash` is not workspace-confined the way the file tools are.** `read`,
       `write`, `edit`, `ls`, `glob` and `grep` all resolve through
@@ -159,9 +174,18 @@ profile fields exist.
 
 ## Housekeeping
 
+- [ ] **`npm test` takes about twenty seconds**, up from three and a half before
+      MCP existed. It is not waste: the suite spawns a dozen real MCP servers,
+      several real HTTP servers, runs ripgrep, and waits out a real one-second
+      `bash` timeout. Measured per client: 475 ms to connect, 95 ms to close.
+      Worth watching rather than fixing — a suite people stop running is worse
+      than a slow one, and mocking the things that make it slow would remove
+      most of what it proves.
+
+
 - [x] ~~`README.md`~~ — written, every figure taken from the system.
-- [ ] `README.md` cites 412 tests, 59 files and ~5,300 lines. Those go stale the
-      moment anything is added. Either bind them with a test or drop them.
+- [x] ~~`README.md` cites counts that go stale~~ — dropped. Binding a test count
+      to prose would be a test that fails for being right.
 - [x] ~~`bin/peasant.js` does not exist~~ — it does now.
 - [x] ~~inline tunables~~ — `src/config/preferences.js` now holds every one with
       the reason for its value, read from `PEASANT_*` and refusing a value it

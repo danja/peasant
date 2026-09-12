@@ -183,6 +183,44 @@ test('a retired provider does not count against the pool being empty', async (t)
   assert.ok(err instanceof NoProviderError, 'with everyone retired there is nobody left');
 });
 
+test('a provider can be put first mid-session', async (t) => {
+  // Which provider should lead is a judgement that changes with the task, and
+  // the answer is often only obvious once a session is stalling. Restarting to
+  // change it would lose the conversation.
+  const { a, b, clientA, clientB } = await providerPair(t);
+  const router = new Router([clientA, clientB], { sleep: noSleep });
+  assert.deepEqual(router.clients.map((c) => c.name), ['alpha', 'beta']);
+
+  router.prefer('beta');
+  assert.deepEqual(router.clients.map((c) => c.name), ['beta', 'alpha']);
+
+  b.respond({ json: defaultCompletion('from beta') });
+  assert.equal((await router.complete(ask)).content, 'from beta');
+  assert.equal(a.requests.length, 0);
+});
+
+test('preferring a withdrawn provider gives it another chance', async (t) => {
+  // The user may have fixed whatever was wrong with it, and asking for it by
+  // name is a deliberate act.
+  const { a, b, clientA, clientB } = await providerPair(t);
+  a.respond({ status: 402, json: {} });
+  b.respond({ json: defaultCompletion('from beta') });
+  const router = new Router([clientA, clientB], { sleep: noSleep });
+  await router.complete(ask);
+  assert.ok(router.retired.has('alpha'));
+
+  router.prefer('alpha');
+  assert.equal(router.retired.has('alpha'), false);
+  a.respond({ json: defaultCompletion('alpha works now') });
+  assert.equal((await router.complete(ask)).content, 'alpha works now');
+});
+
+test('preferring an unknown provider says what there is', async (t) => {
+  const { clientA, clientB } = await providerPair(t);
+  const router = new Router([clientA, clientB]);
+  assert.throws(() => router.prefer('gamma'), /gamma is not configured\. Available: alpha, beta/);
+});
+
 // --- rotation, on and off --------------------------------------------------
 
 test('rotation off pins every request to the first provider and waits', async (t) => {

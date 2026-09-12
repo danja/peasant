@@ -11,11 +11,14 @@ import cerebras from './profiles/cerebras.js';
 import openrouter from './profiles/openrouter.js';
 import google from './profiles/google.js';
 import huggingface from './profiles/huggingface.js';
+import nvidia from './profiles/nvidia.js';
+import together from './profiles/together.js';
 import ollama from './profiles/ollama.js';
 import llamacpp from './profiles/llamacpp.js';
 
 export const PROFILES = Object.freeze([
-  groq, mistral, cerebras, openrouter, google, huggingface, ollama, llamacpp,
+  groq, mistral, cerebras, openrouter, google, huggingface,
+  nvidia, together, ollama, llamacpp,
 ]);
 
 export const PROFILE_NAMES = Object.freeze(PROFILES.map((p) => p.name));

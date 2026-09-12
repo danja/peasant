@@ -60,6 +60,28 @@ despite being 78× larger. Mistral alone reports what a query cost.
 **OpenRouter and Cerebras publish nothing.** Their budget is discovered only
 from 429s.
 
+## Mistral: measured twice, different answers
+
+At 09:00 on 2026-09-12 Mistral reported 125 requests and 625,000 tokens per
+minute. At 16:40 the same account, the same key, returned 429 to every request
+with:
+
+```
+x-ratelimit-limit-req-minute: 0
+x-ratelimit-remaining-req-minute: 0
+{"message":"Rate limit exceeded","code":"1300"}
+```
+
+A *limit* of zero rather than an exhausted window, and persistent rather than
+momentary. Whatever the cause, it is a reminder that these figures are a
+property of an account on a day, not of a provider: a number measured this
+morning can be wrong by the afternoon, which is the argument for reading the
+headers on every response rather than recording a figure anywhere.
+
+peasant treats a zero limit as a symptom rather than a durable fact, so the
+provider is retried rather than dropped for the session. That is the right call
+for a momentary zero and merely harmless for a persistent one.
+
 ## An overflow is not always a 429
 
 Groq answers a per-minute **token** overflow with **HTTP 413**, reserving 429

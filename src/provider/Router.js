@@ -51,6 +51,25 @@ export class Router {
 
   get clients() { return this.#clients; }
 
+  // Moves one provider to the front for the rest of the session.
+  //
+  // Which provider should lead is a judgement that changes with the task --
+  // Groq is far faster, Mistral has seventy eight times the token headroom --
+  // and the answer is often only obvious once a session is under way and
+  // stalling. Restarting to change it loses the conversation.
+  prefer(name) {
+    const index = this.#clients.findIndex((c) => c.name === name);
+    if (index === -1) {
+      throw new Error(`${name} is not configured. Available: ${this.#clients.map((c) => c.name).join(', ')}`);
+    }
+    const [chosen] = this.#clients.splice(index, 1);
+    this.#clients.unshift(chosen);
+    // A provider asked for by name is worth another look, even if it was
+    // withdrawn earlier: the user may have fixed whatever was wrong with it.
+    this.#retired.delete(name);
+    return chosen;
+  }
+
   // Who would serve a request of this size right now, and what it would cost to
   // wait. Ordered by preference, not by headroom: the configured order is a
   // decision the user made.

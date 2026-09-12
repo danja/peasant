@@ -45,6 +45,29 @@ export const DEFAULTS = Object.freeze({
   // compacted. A fraction rather than a number of tokens, because the window
   // differs per model and is read from the catalogue.
   compactAt: 0.7,
+
+  // How many times the agent may call a tool and look again before giving up.
+  //
+  // A model stuck in a loop would otherwise spend a day's quota in a few
+  // seconds. Twenty five is enough for any task these models finish and short
+  // enough that a loop is caught while it is still cheap.
+  maxTurns: 25,
+
+  // Messages at the end of a conversation never summarised away. The most
+  // recent exchange is what the model is actually working from, and a summary
+  // of it would lose exactly the detail in use.
+  //
+  // Mechanical compaction will still cut into this when nothing else fits:
+  // on a small budget the tool schemas can cost more than the whole recent
+  // window, and then keeping six messages is not a policy but a guarantee of
+  // failure.
+  keepRecent: 6,
+
+  // How many sessions to keep. They are small -- a long one is tens of
+  // kilobytes -- but nothing was removing them, and an unbounded directory of
+  // transcripts is a slow leak and a growing pile of whatever the workspace
+  // contained. Old enough to have forgotten, recent enough to still resume.
+  keepSessions: 100,
 });
 
 // Environment variable for each, so everything tunable is tunable from .env.
@@ -54,6 +77,9 @@ const ENV_KEYS = Object.freeze({
   backoffMs: 'PEASANT_BACKOFF_MS',
   maxToolResultChars: 'PEASANT_MAX_TOOL_RESULT',
   compactAt: 'PEASANT_COMPACT_AT',
+  maxTurns: 'PEASANT_MAX_TURNS',
+  keepRecent: 'PEASANT_KEEP_RECENT',
+  keepSessions: 'PEASANT_KEEP_SESSIONS',
 });
 
 export const TUNABLE_ENV_VARS = Object.freeze(Object.values(ENV_KEYS));
@@ -93,6 +119,9 @@ export function preferences(env = {}) {
   set('backoffMs', (r, n) => readNumber(r, n, { min: 0, max: 3_600_000, integer: true }));
   set('maxToolResultChars', (r, n) => readNumber(r, n, { min: 100, max: 1_000_000, integer: true }));
   set('compactAt', (r, n) => readNumber(r, n, { min: 0.1, max: 0.95, integer: false }));
+  set('maxTurns', (r, n) => readNumber(r, n, { min: 1, max: 200, integer: true }));
+  set('keepRecent', (r, n) => readNumber(r, n, { min: 2, max: 50, integer: true }));
+  set('keepSessions', (r, n) => readNumber(r, n, { min: 1, max: 100_000, integer: true }));
 
   return Object.freeze(out);
 }

@@ -19,11 +19,13 @@ import { specs } from '../tools/registry.js';
 import { closeServers } from '../mcp/connect.js';
 import { loadCommands, expand } from './commands.js';
 import { Store } from '../session/Store.js';
+import { loadContext, renderContext } from '../agent/context-files.js';
 
 const COMMANDS = {
   '/help': 'list these commands',
   '/clear': 'start a new conversation, keeping the session',
   '/providers': 'show which providers are configured',
+  '/provider': 'put one provider first for the rest of this session',
   '/tools': 'list the tools available, including any from MCP servers',
   '/tokens': 'show what this conversation costs per request',
   '/compact': 'summarise the older half of the conversation now',
@@ -125,14 +127,25 @@ export async function session(term, env, { allowAll, resume = null }) {
             term.line(term.paint('  a file in .peasant/commands/ becomes a command of its own', 'grey'));
           }
           return true;
-        case '/clear':
+        case '/clear': {
+          // Re-read the context files. This already rebuilds the system prompt,
+          // so it is the natural moment to notice that PEASANT.md has changed;
+          // otherwise editing it mid-session does nothing until a restart.
+          const reloaded = loadContext({ root: ctx.root, env });
+          for (const note of reloaded.notes) term.line(term.paint(`  ${note}`, 'yellow'));
+          ctx.context = renderContext(reloaded.found);
+          ctx.contextFiles = reloaded;
+
           conversation = fresh(ctx.root, ctx.context);
           turns = 0;
           record = store.create({ root: ctx.root });
           known = conversation.length;
           record.sync(conversation.messages, 0);
-          term.line(term.paint(`  new conversation (${record.id})`, 'grey'));
+          term.line(term.paint(
+            `  new conversation (${record.id})`
+            + `${reloaded.found.length > 0 ? `, ${reloaded.chars} chars of context re-read` : ''}`, 'grey'));
           return true;
+        }
         case '/tools': {
           const builtin = ctx.tools.filter((x) => !x.external);
           const external = ctx.tools.filter((x) => x.external);
@@ -143,6 +156,22 @@ export async function session(term, env, { allowAll, resume = null }) {
           }
           if (external.length === 0) {
             term.line(term.paint('  no MCP servers connected; "peasant mcp" explains how', 'grey'));
+          }
+          return true;
+        }
+        case '/provider': {
+          const wanted = words[0];
+          if (!wanted) {
+            term.line(term.paint(
+              `  currently ${ctx.router.clients.map((c) => c.name).join(', ')}`, 'grey'));
+            term.line(term.paint('  /provider <name> puts one first', 'grey'));
+            return true;
+          }
+          try {
+            const chosen = ctx.router.prefer(wanted);
+            term.line(term.paint(`  ${chosen.name} first, on ${chosen.model}`, 'grey'));
+          } catch (e) {
+            term.line(term.paint(`  ${e.message}`, 'yellow'));
           }
           return true;
         }

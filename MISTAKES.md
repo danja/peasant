@@ -2,6 +2,80 @@
 
 Newest first. What happened, the root cause, and what now prevents it.
 
+## 2026-09-12 — A fixed delay standing in for a real signal
+
+**What happened.** `StdioTransport.start()` waited fifty milliseconds after
+spawning an MCP server and then assumed it had started:
+
+```js
+setTimeout(() => { this.#child.off('error', onError); resolve(); }, 50);
+```
+
+**Root cause.** A race written in both directions. On a loaded machine fifty
+milliseconds is not enough and a failed spawn would be reported as a working
+connection; on an idle one it is pure waiting, once per server, every run.
+`child_process` emits `spawn` when the process is running and `error` when it
+could not start, which is exactly the question being asked.
+
+Found while looking at why the test suite had slowed, not by a failing test.
+Nothing would have caught it: the wrong behaviour is intermittent and the
+slowness is invisible until someone measures.
+
+**Prevention.** It now waits for `spawn` or `error`, whichever arrives. There is
+no timer left to be wrong.
+
+## 2026-09-12 — Stuck repeating "no provider can serve a request of about 9057 tokens"
+
+**What happened.** A session reached a conversation larger than the only
+available provider's budget, reported it, and reproduced the same error on every
+retry. Forever. There was no way out except restarting.
+
+**Root cause.** `Compactor.compact()` returned early whenever `older` was empty:
+
+```js
+if (older.length === 0) return { compacted: false, quiet: true, ... };
+```
+
+Three file reads make a conversation that does not fit, and `ContextBudget.split`
+keeps the last six messages, so `older` is empty and there is no transcript to
+summarise. The mechanical fallback -- elide tool results, then drop oldest --
+was written for exactly this and sat behind that early return, never reached.
+The Loop saw "quiet", said nothing, sent the oversized request anyway, and the
+router refused it.
+
+"Nothing old enough to summarise" is not the same as "nothing to do". I had
+conflated the *method* with the *need*.
+
+**Prevention.** The early return now happens only when the conversation actually
+fits. Otherwise it goes mechanical with `older` empty, which reduces a
+four-message conversation from 13,378 tokens to 138. Stage one also elides tool
+results across the whole conversation rather than only the older part: the
+message that makes a conversation unsendable is usually the one just read, and
+refusing to touch it for being recent left nothing to do.
+`tests/unit/context-budget.test.js` pins the empty-`older` case by name.
+
+**Also.** When it does happen the session now says what would change it --
+`/compact`, `/clear`, or a provider with more headroom -- rather than only
+stating the arithmetic.
+
+## 2026-09-12 — An empty placeholder erased a real key
+
+**What happened.** Found while diagnosing the above. A later configuration file
+assigning `GROQ_API_KEY=` blanked a perfectly good key from `~/.config/peasant/.env`.
+
+**Root cause.** `load()` skipped empty values from the *environment* but not
+from *files*. In a `.env`, "fill this in" and "unset this" look identical, and
+only one of them is ever meant.
+
+This is a trap of my own making: `example.env` ships with every key empty, and
+the README tells people to copy it. Copying it to a project directory rather
+than to `~/.config/peasant/` silently disables every provider, which reads
+exactly like "peasant cannot see my keys".
+
+**Prevention.** A later file may override a value; it may not erase one. An
+empty value still registers a key nothing else has set, so "no account yet" stays
+distinguishable from "the name is misspelt". Both directions are tested.
+
 ## 2026-09-12 — Somebody else's .env stopped peasant starting
 
 **What happened.** peasant refused to start, reporting that it could not read

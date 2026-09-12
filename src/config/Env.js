@@ -135,6 +135,15 @@ export function load({ files = null, env = process.env, cwd = process.cwd(), hom
       continue;
     }
     for (const [k, v] of Object.entries(values)) {
+      // An empty assignment means "fill this in", not "blank whatever was set
+      // earlier". example.env ships every key empty, so copying it into a
+      // project directory silently disabled every key from the user's own
+      // config -- following this project's own installation instructions a
+      // little wrong. A later file may *override* a value; it may not erase one.
+      //
+      // An empty value still registers the key when nothing has set it, so
+      // "no account yet" stays distinguishable from "the name is misspelt".
+      if (v === '' && (merged[k] ?? '') !== '') continue;
       merged[k] = v;
       sources[k] = file;
     }

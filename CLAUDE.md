@@ -120,6 +120,13 @@ profiles hold only header *names*, and `src/config/preferences.js` is the only
 home for a tunable. The structure leaves a hardcoded limit nowhere to live,
 which is stronger than a grep that would notice one.
 
+**An early return is a claim that there is nothing to do.** Twice now one has
+been wrong: `compact()` returned early when there was nothing to *summarise*,
+skipping the mechanical reduction that was the actual remedy, and `load()`
+returned a file's values without asking whether an empty one should overwrite
+anything. Before writing `if (x.length === 0) return`, ask whether it means the
+work is done or only that one method of doing it is unavailable.
+
 **A guard that scrapes source needs its own test that the scraping still works**, or it
 goes blind rather than red. `tests/guard/scanner.test.js` is that test for
 `tests/guard/lib/scan.js`; it caught the scanner blanking the very string contents it was

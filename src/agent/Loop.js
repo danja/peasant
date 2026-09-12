@@ -9,7 +9,7 @@ import { specs } from '../tools/registry.js';
 import { ToolError } from '../tools/Tool.js';
 import { DECISION } from '../permission/Policy.js';
 
-const DEFAULT_MAX_TURNS = 25;
+import { DEFAULTS } from '../config/preferences.js';
 
 export class Loop {
   #router;
@@ -22,7 +22,7 @@ export class Loop {
   #compactor;
   #estimator;
 
-  constructor({ router, tools, policy, prompt, root, maxTurns = DEFAULT_MAX_TURNS, budget = null, compactor = null, estimator = null }) {
+  constructor({ router, tools, policy, prompt, root, maxTurns = DEFAULTS.maxTurns, budget = null, compactor = null, estimator = null }) {
     this.#router = router;
     this.#tools = tools;
     this.#policy = policy;

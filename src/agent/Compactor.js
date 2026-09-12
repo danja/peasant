@@ -73,13 +73,26 @@ export class Compactor {
     const messages = conversation.messages;
     const { system, older, recent } = ContextBudget.split(messages, { keepRecent });
 
-    if (older.length === 0) {
-      // Not a problem, and not worth reporting: it is the normal state of a
-      // conversation that was compacted a turn ago.
-      return { conversation, compacted: false, quiet: true, reason: 'nothing old enough to summarise' };
-    }
-
     const before = this.#estimator.estimate({ messages });
+    const fits = !targetFits || targetFits(messages);
+
+    if (older.length === 0) {
+      // "Nothing old enough to summarise" is not the same as "nothing to do".
+      //
+      // Three file reads make a four-message conversation that does not fit,
+      // and none of it is old: `split` keeps the last six messages, so `older`
+      // is empty and there is no transcript to summarise. Returning here meant
+      // the request went out anyway, the router refused it, and the user
+      // retried into exactly the same state for ever. Eliding the tool results
+      // is still available, and it is what actually helps.
+      if (fits) {
+        return { conversation, compacted: false, quiet: true, reason: 'nothing old enough to summarise' };
+      }
+      return this.#mechanical(conversation, {
+        system, older: [], recent, before, targetFits,
+        why: 'the conversation does not fit and none of it is old enough to summarise',
+      });
+    }
     const mechanical = (why) => this.#mechanical(conversation, {
       system, older, recent, before, why, targetFits,
     });
@@ -153,8 +166,14 @@ export class Compactor {
       ...kept,
     ];
 
-    // Stage 1: elide old tool results, keeping every message.
-    let kept = [...older.map(elideToolResult), ...recent];
+    // Stage 1: elide tool results, keeping every message.
+    //
+    // Across the whole body, not just the older part. The message that makes a
+    // conversation unsendable is often the one just read, and refusing to touch
+    // it because it is recent leaves nothing to do. Eliding keeps its first
+    // line and says how much went, which is a great deal better than the turn
+    // failing.
+    let kept = [...older, ...recent].map(elideToolResult);
     let dropped = 0;
     if (affordable(assemble(kept, dropped))) {
       return this.#result(conversation, assemble(kept, dropped), { before, why, changed: older.length });

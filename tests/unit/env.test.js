@@ -116,6 +116,35 @@ test('a project .env overrides the user-level one', (t) => {
   assert.equal(values.GROQ_API_KEY, 'shared', 'without having to restate the key');
 });
 
+test('an empty value in a later file does not blank a real one', (t) => {
+  // The trap this closes: example.env ships every key empty, so copying it
+  // into a project directory disabled every key from the user's own config.
+  // "Fill this in" and "unset this" look identical in a .env file, and only
+  // one of them is ever meant.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'peasant-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const user = path.join(dir, 'user.env');
+  const project = path.join(dir, 'project.env');
+  fs.writeFileSync(user, 'GROQ_API_KEY=real\nGROQ_MODEL=from-user\n');
+  fs.writeFileSync(project, 'GROQ_API_KEY=\nGROQ_MODEL=from-project\n');
+
+  const values = load({ files: [user, project], env: {} });
+  assert.equal(values.GROQ_API_KEY, 'real', 'an empty placeholder must not erase a key');
+  assert.equal(values.GROQ_MODEL, 'from-project', 'but a real value still overrides');
+  assert.equal(sourceOf(values, 'GROQ_API_KEY'), user);
+});
+
+test('an empty value still registers a key nothing else has set', (t) => {
+  // So "no account yet" stays distinguishable from "the name is misspelt".
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'peasant-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const f = path.join(dir, 'a.env');
+  fs.writeFileSync(f, 'NVIDIA_API_KEY=\n');
+  const values = load({ files: [f], env: {} });
+  assert.ok('NVIDIA_API_KEY' in values);
+  assert.equal(values.NVIDIA_API_KEY, '');
+});
+
 test('config files are searched in increasing precedence', () => {
   const files = configFiles({ env: {}, cwd: '/work', home: '/home/x' });
   assert.deepEqual(files, ['/home/x/.config/peasant/.env', '/home/x/.peasant/.env', '/work/.env']);

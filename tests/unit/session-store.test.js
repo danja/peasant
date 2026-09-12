@@ -157,6 +157,31 @@ test('an unreadable session does not break the listing of the others', (t) => {
   assert.ok(listed.some((x) => x.id === '20260101T000000-aaaaaa'));
 });
 
+test('starting a session prunes the oldest', (t) => {
+  // Nothing was removing them. Small individually, but an unbounded directory
+  // of transcripts is a slow leak and a growing pile of whatever the workspace
+  // contained.
+  const { store: s } = store(t);
+  for (let i = 1; i <= 6; i++) {
+    s.create({ root: '/work', id: `2026010${i}T000000-aaaaa${i}`, keep: 1000 });
+  }
+  assert.equal(s.list({ limit: 50 }).length, 6);
+
+  s.create({ root: '/work', id: '20260107T000000-bbbbbb', keep: 3 });
+  const left = s.list({ limit: 50 }).map((x) => x.id);
+  assert.equal(left.length, 3, 'the newest three survive');
+  assert.ok(left.includes('20260107T000000-bbbbbb'), 'including the one just started');
+  assert.ok(!left.includes('20260101T000000-aaaaa1'), 'and the oldest is gone');
+});
+
+test('pruning an empty or missing directory is harmless', (t) => {
+  // Tidying is a convenience and must never stop a session starting.
+  const { store: s } = store(t);
+  assert.equal(s.prune({ keep: 5 }), 0);
+  s.create({ root: '/work' });
+  assert.equal(s.prune({ keep: 100 }), 0, 'nothing to remove is not an error');
+});
+
 test('session files are not world readable', (t) => {
   // They contain whatever the workspace contains, which may be anything.
   const { store: s } = store(t);

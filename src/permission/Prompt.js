@@ -72,15 +72,19 @@ export function preview(terminal, tool, args) {
     case 'write':
       return renderWrite(terminal, { path: args.path, content: args.content });
     default:
-      return describe(tool, args).map((line) => terminal.paint(line, 'grey'));
+      return describe(tool.name, args).map((line) => terminal.paint(line, 'grey'));
   }
 }
 
 // A single line naming the action, for the running display rather than the
 // prompt. The full argument JSON is unreadable at a glance and hides the one
 // field that matters.
-export function describe(tool, args) {
-  switch (tool.name) {
+//
+// Takes a name rather than a tool, because its only caller outside this file
+// has an event rather than a tool and was passing `{ name }` to satisfy the
+// signature -- a seam that would break the moment this needed anything else.
+export function describe(name, args) {
+  switch (name) {
     case 'bash':
       return [args.command];
     case 'write':

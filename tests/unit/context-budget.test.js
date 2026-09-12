@@ -186,6 +186,62 @@ test('compaction sends no tools -- they are the biggest item and no use here', a
   assert.equal(fake.lastRequest.body.tools, undefined);
 });
 
+test('a conversation too big to send is reduced even when none of it is old', async (t) => {
+  // The bug this pins, reported from a real session that got stuck repeating
+  // "no provider can serve a request of about 9057 tokens":
+  //
+  // three file reads make a conversation that does not fit, and `split` keeps
+  // the last six messages, so `older` is empty and there is no transcript to
+  // summarise. compact() returned early on that, the oversized request went out
+  // anyway, the router refused it, and retrying reproduced it exactly. For ever.
+  const { compactor } = await compactorWith(t);
+  const estimator = new TokenEstimator();
+
+  const c = new Conversation({ system: 's' });
+  c.user('read the big file');
+  c.assistant({ content: '', toolCalls: [{ id: 'c1', name: 'read', arguments: '{}' }] });
+  c.toolResult('c1', `src/big.js (900 lines)\n${'const x = 1;\n'.repeat(2000)}`);
+
+  const { older } = ContextBudget.split(c.messages);
+  assert.equal(older.length, 0, 'the premise: nothing is old enough to summarise');
+
+  const result = await compactor.compact(c, {
+    canAfford: () => false,
+    targetFits: (m) => estimator.estimate({ messages: m }) <= 8000,
+  });
+
+  assert.equal(result.compacted, true, 'it must still reduce');
+  assert.equal(result.mechanical, true, 'and without a request it cannot afford');
+  assert.ok(result.after < result.before, `${result.before} -> ${result.after}`);
+  assert.deepEqual(result.conversation.pendingToolCalls, [], 'and the result is sendable');
+});
+
+test('a recent tool result is elided rather than left alone for being recent', async (t) => {
+  // The message that makes a conversation unsendable is often the one just
+  // read. Refusing to touch it because it is recent leaves nothing to do.
+  const { compactor } = await compactorWith(t);
+  const c = new Conversation({ system: 's' });
+  c.user('read it');
+  c.assistant({ content: '', toolCalls: [{ id: 'c1', name: 'read', arguments: '{}' }] });
+  c.toolResult('c1', `src/big.js (900 lines)\n${'x'.repeat(30000)}`);
+
+  const result = await compactor.compact(c, { canAfford: () => false, targetFits: () => false });
+  const tool = result.conversation.messages.find((m) => m.role === 'tool');
+  assert.match(tool.content, /^src\/big\.js \(900 lines\)/, 'the first line is the gist and survives');
+  assert.match(tool.content, /elided by compaction/, 'and the rest is honestly accounted for');
+});
+
+test('a conversation that fits is still left alone', async (t) => {
+  // The early return is right when there is genuinely nothing to do; it was
+  // only wrong when the conversation did not fit.
+  const { compactor } = await compactorWith(t);
+  const c = new Conversation({ system: 's' }).user('hi');
+  const result = await compactor.compact(c, { targetFits: () => true });
+  assert.equal(result.compacted, false);
+  assert.equal(result.quiet, true);
+  assert.equal(result.conversation, c);
+});
+
 test('a short conversation is left alone', async (t) => {
   const { compactor } = await compactorWith(t);
   const c = new Conversation({ system: 's' }).user('hi');

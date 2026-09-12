@@ -45,6 +45,7 @@ export class Repl {
   #closing = false;
   #exiting = false;
   #recent = [];
+  #pending = [];
 
   constructor({ terminal, input = process.stdin, output = process.stdout, historyFile = null }) {
     this.#terminal = terminal;
@@ -94,8 +95,6 @@ export class Repl {
 
     // The async iterator pauses the input while the body is awaiting, which is
     // what keeps a pipe from delivering every line at once into one turn.
-    let pending = [];
-
     for await (const line of this.#rl) {
       // Multiline input, because pasting a function into a prompt and having it
       // become eight separate turns is both useless and expensive.
@@ -103,8 +102,8 @@ export class Repl {
       // Two ways in, both explicit: a trailing backslash, and an unclosed code
       // fence. Neither guesses -- guessing whether a blank line ends a block is
       // how a REPL becomes impossible to predict.
-      pending.push(line);
-      const joined = pending.join('\n');
+      this.#pending.push(line);
+      const joined = this.#pending.join('\n');
       if (continues(line, joined)) {
         this.#setPrompt(isTty ? this.#terminal.paint('… ', 'grey') : '');
         this.#rl.prompt();
@@ -113,7 +112,7 @@ export class Repl {
       this.#setPrompt(isTty ? this.#terminal.paint('> ', 'bold') : '');
 
       const trimmed = stripContinuations(joined).trim();
-      pending = [];
+      this.#pending = [];
       if (trimmed === '') { this.#rl.prompt(); continue; }
 
       this.#pushHistory(trimmed);
@@ -138,6 +137,13 @@ export class Repl {
             this.#terminal.error(this.#terminal.paint(
               '  this will repeat until the conversation changes — /clear starts a fresh one',
               'grey'));
+          } else if (/no provider can serve/i.test(e.message)) {
+            // Reaching this means compaction could not get the conversation
+            // under the smallest available budget, so repeating the request
+            // repeats the arithmetic. Say what would change it.
+            this.#terminal.error(this.#terminal.paint(
+              '  /compact reduces the conversation, /clear starts again, and a provider with more'
+              + ' headroom in PEASANT_PROVIDERS avoids it entirely', 'grey'));
           }
         }
       } finally {
@@ -162,6 +168,17 @@ export class Repl {
     if (this.#busy) {
       // Cancel the request. The session, and everything it has cost, survives.
       this.#controller?.abort();
+      return;
+    }
+    if (this.#pending.length > 0) {
+      // A half-typed multiline block. Without this the only way out was to
+      // finish the block or leave the session, because the buffer lived in the
+      // loop and the signal handler could not reach it.
+      this.#pending = [];
+      this.#rl.write(null, { ctrl: true, name: 'u' });
+      this.#setPrompt(this.#terminal.paint('> ', 'bold'));
+      this.#terminal.line(this.#terminal.paint('  block abandoned', 'grey'));
+      this.#rl.prompt();
       return;
     }
     if (this.#rl.line !== '') {

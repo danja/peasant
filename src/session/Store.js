@@ -16,6 +16,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { DEFAULTS } from '../config/preferences.js';
 
 const VERSION = 1;
 
@@ -53,12 +54,38 @@ export class Store {
 
   fileFor(id) { return path.join(this.#dir, `${id}.jsonl`); }
 
+  // Removes all but the newest `keep` sessions.
+  //
+  // Ids sort chronologically, so this is a directory read and some unlinks --
+  // no need to open anything. Failure is ignored: tidying is a convenience and
+  // must never stop a session starting.
+  prune({ keep = DEFAULTS.keepSessions } = {}) {
+    let files;
+    try {
+      files = fs.readdirSync(this.#dir).filter((f) => f.endsWith('.jsonl')).sort();
+    } catch {
+      return 0;
+    }
+    const doomed = files.slice(0, Math.max(0, files.length - keep));
+    let removed = 0;
+    for (const f of doomed) {
+      try { fs.unlinkSync(path.join(this.#dir, f)); removed++; } catch { /* leave it */ }
+    }
+    return removed;
+  }
+
   // Starts a session. Returns a handle that knows how to append to it.
-  create({ root, id = newId() }) {
+  create({ root, id = newId(), keep = DEFAULTS.keepSessions }) {
     fs.mkdirSync(this.#dir, { recursive: true, mode: DIR_MODE });
     const file = this.fileFor(id);
     const header = { type: 'session', version: VERSION, id, root, created: new Date().toISOString() };
     fs.writeFileSync(file, `${JSON.stringify(header)}\n`, { mode: FILE_MODE });
+
+    // After writing, not before, so `keep` means how many sessions exist once
+    // this one has started rather than how many did beforehand. Tidying happens
+    // here rather than on a schedule because there is no daemon, and starting a
+    // session is the only moment peasant reliably runs.
+    this.prune({ keep });
     return new Session({ store: this, id, file, root });
   }
 

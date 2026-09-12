@@ -203,8 +203,8 @@ test('an edit is previewed as a diff, not as JSON', () => {
 });
 
 test('the prompt describes what will happen, not the argument JSON', () => {
-  assert.deepEqual(describeCall(byName('bash'), { command: 'rm -rf build' }), ['rm -rf build']);
-  const edit = describeCall(byName('edit'), { path: 'a.js', old: 'x = 1', new: 'x = 2' });
+  assert.deepEqual(describeCall('bash', { command: 'rm -rf build' }), ['rm -rf build']);
+  const edit = describeCall('edit', { path: 'a.js', old: 'x = 1', new: 'x = 2' });
   assert.match(edit[0], /^edit a\.js$/);
   assert.match(edit[1], /^- x = 1$/);
   assert.match(edit[2], /^\+ x = 2$/);

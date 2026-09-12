@@ -45,11 +45,18 @@ export class StdioTransport {
     });
     this.#child.on('close', () => this.#onClose());
 
+    // `spawn` fires when the process is actually running and `error` when it
+    // could not start, which is exactly the question. An earlier version waited
+    // a fixed fifty milliseconds and assumed success, which is a race in both
+    // directions: too short on a loaded machine, and pure waiting otherwise.
     await new Promise((resolve, reject) => {
-      const onError = (e) => reject(new Error(`cannot start ${this.#command}: ${e.message}`));
+      const onSpawn = () => { this.#child.off('error', onError); resolve(); };
+      const onError = (e) => {
+        this.#child.off('spawn', onSpawn);
+        reject(new Error(`cannot start ${this.#command}: ${e.message}`));
+      };
+      this.#child.once('spawn', onSpawn);
       this.#child.once('error', onError);
-      // spawn is asynchronous; give it a tick to fail on a missing binary.
-      setTimeout(() => { this.#child.off('error', onError); resolve(); }, 50);
     });
     return this;
   }
