@@ -59,6 +59,20 @@ export class Conversation {
     return this;
   }
 
+  // An interrupted turn can leave tool calls unanswered, and a conversation in
+  // that state refuses every subsequent message -- so an interrupt would cost
+  // the whole session rather than one request. Answering them keeps the
+  // transcript valid and tells the model what happened, which is also true.
+  abandonPending(reason = 'interrupted by the user') {
+    if (!this.#pending) return 0;
+    const ids = [...this.#pending];
+    for (const id of ids) {
+      this.#messages.push({ role: 'tool', tool_call_id: id, content: `Error: ${reason}` });
+    }
+    this.#pending = null;
+    return ids.length;
+  }
+
   #assertNothingPending(what) {
     if (this.#pending && this.#pending.size > 0) {
       throw new Error(

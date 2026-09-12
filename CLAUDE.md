@@ -66,8 +66,11 @@ zero-dependency and no-native rules still matter, because they are what stop a
   tool, and `search/` — two interchangeable grep engines behind one door
 - `src/permission/` — `Policy.js`, `Prompt.js`
 - `src/session/` — `Store.js` (JSONL under `~/.peasant/sessions`)
-- `src/ui/` — `Terminal.js` (the only module that writes to stdout), `Ansi.js`, `Repl.js`,
-  `Render.js`, `Diff.js`
+- `src/ui/` — `Terminal.js` (the only module that writes to stdout), `Ansi.js`
+  (the one list of escape codes), `Repl.js`, `Render.js`, `Diff.js`
+- `src/cli/` — one file per command, plus `EventPrinter.js` (agent events to
+  terminal), `context.js` (assembling providers, policy and workspace) and
+  `agent.js`. `bin/peasant.js` is dispatch only.
 - `src/mcp/` — `Client.js`, stdio JSON-RPC
 - `tests/guard/` — the rules below, enforced; `tests/unit/`, `tests/compat/`, `tests/live/`
 

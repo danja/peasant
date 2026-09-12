@@ -40,14 +40,18 @@ test('only src/ui writes to the terminal', () => {
 });
 
 test('escape sequences are declared in Ansi.js and nowhere else', () => {
-  // A stray \x1b[ somewhere else is a code nobody will find when colour has to
+  // A stray escape somewhere else is a code nobody will find when colour has to
   // be switched off.
+  //
+  // Comments are stripped first: prose *describing* an escape sequence is not
+  // one, and a comment explaining why readline emitted cursor-control codes
+  // should not be indistinguishable from emitting them.
   const offenders = [];
   for (const file of listFiles()) {
     const rel = path.relative(REPO, file);
     if (rel === path.join('src', 'ui', 'Ansi.js')) continue;
-    const src = fs.readFileSync(file, 'utf8');
-    if (/\\x1b\[|\\u001b\[|\\033\[/.test(src)) offenders.push(rel);
+    const { clean } = scanSource(fs.readFileSync(file, 'utf8'));
+    if (/\\x1b\[|\\u001b\[|\\033\[/.test(clean)) offenders.push(rel);
   }
   assert.deepEqual(offenders, [], `escape sequences outside Ansi.js: ${offenders.join(', ')}`);
 });

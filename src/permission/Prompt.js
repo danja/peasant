@@ -8,6 +8,7 @@
 
 import readline from 'node:readline';
 import { DECISION } from './Policy.js';
+import { renderEdit, renderWrite } from '../ui/Diff.js';
 
 export class Prompt {
   #terminal;
@@ -39,7 +40,7 @@ export class Prompt {
 
     term.endLine();
     term.line(term.paint(`  ${tool.name}`, 'bold', 'yellow'));
-    for (const line of describe(tool, args)) term.line(term.paint(`    ${line}`, 'grey'));
+    for (const line of preview(term, tool, args)) term.line(`    ${line}`);
     term.line('');
 
     const answer = await this.#question(term.paint('  allow? [y]es / [n]o / [a]lways: ', 'yellow'));
@@ -58,9 +59,26 @@ export class Prompt {
   }
 }
 
-// What the model is about to do, in the form a person can judge in a second.
-// The full argument JSON is unreadable at a glance and hides the one field that
-// matters, so each tool gets the line that actually says what will happen.
+// What will happen, shown the way a person can check it. `edit` and `write`
+// get a real diff, because "is this the right change" is not a question anyone
+// can answer from a JSON blob -- and an approval prompt nobody reads properly
+// is worse than no prompt at all.
+export function preview(terminal, tool, args) {
+  switch (tool.name) {
+    case 'edit':
+      return renderEdit(terminal, {
+        path: args.path, old: args.old, replacement: args.new, all: args.all,
+      });
+    case 'write':
+      return renderWrite(terminal, { path: args.path, content: args.content });
+    default:
+      return describe(tool, args).map((line) => terminal.paint(line, 'grey'));
+  }
+}
+
+// A single line naming the action, for the running display rather than the
+// prompt. The full argument JSON is unreadable at a glance and hides the one
+// field that matters.
 export function describe(tool, args) {
   switch (tool.name) {
     case 'bash':

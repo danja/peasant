@@ -145,6 +145,9 @@ test('ls marks directories and flags the ones never searched', async (t) => {
   const { root, ctx } = workspace(t, { 'a.txt': 'x', 'src/b.js': 'y' });
   fs.mkdirSync(path.join(root, 'node_modules'));
   const out = await run('ls', {}, ctx);
+  // The count leads: the first line is what a one-line summary shows, and "."
+  // says nothing.
+  assert.match(out.split('\n')[0], /: \d+ entries/);
   assert.match(out, /src\//);
   assert.match(out, /node_modules\/\s+\(not searched\)/);
   assert.match(out, /a\.txt/);

@@ -89,12 +89,41 @@ runs commands to completion. Two real tasks in a scratch workspace:
 The second run is the one worth noting: the task completed across two providers
 without the user doing anything, which is the entire argument for the router.
 
-## Phase 3 — Terminal UI
+## Phase 3 — Terminal UI — **complete**
 
-`Ansi`, `Terminal`, `Repl`, `Render`, `Diff`.
+`Ansi`, `Terminal`, `Render`, `Diff`, `Repl`, and `src/cli/` — the entry point
+is dispatch only now, 99 lines rather than 307, one file per command.
 
-**Deliverable:** the interactive session — streamed output, history, multiline
-input, and a Ctrl-C that cancels the in-flight request rather than the process.
+**Deliverable, verified live:** `peasant` with no arguments starts an
+interactive session. The conversation persists between prompts, slash commands
+work (`/help`, `/clear`, `/providers`, `/tokens`, `/allow`, `/exit`), and a
+two-turn session read a file, answered about it, then edited it.
+
+- **`Render` is line-buffered on purpose.** Markdown arrives in pieces — a `**`
+  can be split across two deltas — so a line is styled once it is complete. One
+  line of latency, against either re-printing styled text over unstyled text or
+  getting the styling wrong at a boundary. A test renders the same source at
+  every chunk size from 1 to 12 and asserts the output is identical.
+- **`Diff` is not a diff algorithm.** `edit` already knows the exact old and new
+  text; the job is to show it in the shape people read diffs in, clipped head
+  and tail. It is what the approval prompt shows, because "is this the right
+  change" is not a question anyone can answer from a JSON blob.
+- **Ctrl-C means three different things** depending on when it arrives:
+  mid-request it cancels the request and keeps the conversation; with text typed
+  it clears the line; at an empty prompt it leaves.
+
+### What Phase 3 exposed
+
+- **An interrupt could cost the whole session.** A cancelled turn leaves tool
+  calls unanswered, and a conversation in that state refuses every later
+  message. `Conversation.abandonPending()` answers them, so one Ctrl-C costs one
+  request rather than everything built up before it.
+- **`readline` with `terminal: true` writes escapes whether or not anything is
+  watching.** Piped, that produced cursor-control codes around every prompt and
+  echoed the input back. It now follows `input.isTTY`.
+- **`close` fires at end of input.** Treating it as "stop now" ended a piped
+  session after the first turn with every remaining line unread. Leaving
+  deliberately and running out of input are different things.
 
 ### What Phase 2 exposed
 

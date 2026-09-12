@@ -6,8 +6,9 @@ import path from 'node:path';
 import { Conversation } from '../../src/agent/Conversation.js';
 import { Loop } from '../../src/agent/Loop.js';
 import { Policy, DECISION } from '../../src/permission/Policy.js';
-import { describe as describeCall } from '../../src/permission/Prompt.js';
+import { describe as describeCall, preview } from '../../src/permission/Prompt.js';
 import { TOOLS, byName } from '../../src/tools/registry.js';
+import { Terminal } from '../../src/ui/Terminal.js';
 import { Router } from '../../src/provider/Router.js';
 import { OpenAICompatClient } from '../../src/provider/OpenAICompatClient.js';
 import { defineProfile } from '../../src/provider/profiles/generic.js';
@@ -60,6 +61,32 @@ test('answering every call lets the turn continue', () => {
   c.toolResult('c2', 'two');
   assert.doesNotThrow(() => c.assistant({ content: 'x' }));
   assert.deepEqual(c.pendingToolCalls, []);
+});
+
+test('abandoning pending calls keeps the conversation usable', () => {
+  // An interrupt mid-turn leaves tool calls unanswered, and a conversation in
+  // that state refuses every later message -- so one Ctrl-C would cost the
+  // whole session rather than one request.
+  const c = new Conversation();
+  c.user('hi').assistant({
+    toolCalls: [{ id: 'c1', name: 'read', arguments: '{}' }, { id: 'c2', name: 'ls', arguments: '{}' }],
+  });
+  assert.throws(() => c.user('again'), /unanswered/);
+
+  assert.equal(c.abandonPending(), 2);
+  assert.deepEqual(c.pendingToolCalls, []);
+  assert.doesNotThrow(() => c.user('again'));
+
+  const answers = c.messages.filter((m) => m.role === 'tool');
+  assert.deepEqual(answers.map((m) => m.tool_call_id), ['c1', 'c2']);
+  assert.match(answers[0].content, /interrupted by the user/);
+});
+
+test('abandoning nothing is harmless', () => {
+  const c = new Conversation();
+  c.user('hi');
+  assert.equal(c.abandonPending(), 0);
+  assert.equal(c.messages.filter((m) => m.role === 'tool').length, 0);
 });
 
 test('reasoning is not sent back to the provider', () => {
@@ -116,6 +143,24 @@ test('remembering an allowance lasts the session and no longer', () => {
 
 test('an unknown mode is an error, not a default', () => {
   assert.throws(() => new Policy({ mode: 'sometimes' }), /must be one of ask, allow, deny/);
+});
+
+test('an edit is previewed as a diff, not as JSON', () => {
+  // "Is this the right change" is not a question anyone can answer from a JSON
+  // blob, and an approval prompt nobody reads properly is worse than none.
+  const out = { isTTY: false, columns: 80, written: [], write(s) { this.written.push(s); return true; } };
+  const term = new Terminal({ out, err: out, colour: false, env: {} });
+  const lines = preview(term, byName('edit'), { path: 'a.js', old: 'x = 1', new: 'x = 2' });
+  assert.match(lines[0], /^a\.js$/);
+  assert.match(lines[1], /- x = 1/);
+  assert.match(lines[2], /\+ x = 2/);
+
+  const write = preview(term, byName('write'), { path: 'b.js', content: 'one\ntwo' });
+  assert.match(write[0], /^create b\.js$/);
+  assert.match(write[1], /2 lines/);
+
+  // Anything without a bespoke preview still says something useful.
+  assert.deepEqual(preview(term, byName('bash'), { command: 'ls -l' }), ['ls -l']);
 });
 
 test('the prompt describes what will happen, not the argument JSON', () => {

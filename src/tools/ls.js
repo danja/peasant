@@ -25,12 +25,17 @@ export default defineTool({
       .sort((a, b) => (a.isDirectory() === b.isDirectory() ? a.name.localeCompare(b.name) : a.isDirectory() ? -1 : 1));
 
     if (entries.length === 0) return `${display(root, dir)} is empty`;
+    const dirs = entries.filter((e) => e.isDirectory()).length;
 
     const lines = entries.map((e) => {
       if (e.isDirectory()) return `${e.name}/${SKIP_DIRS.has(e.name) ? '  (not searched)' : ''}`;
       const size = fs.statSync(path.join(dir, e.name)).size;
       return `${e.name}  ${size}`;
     });
-    return `${display(root, dir)}\n${lines.join('\n')}`;
+    // The count leads, because the first line is what a caller shows in a
+    // one-line summary and "." says nothing.
+    const summary = `${display(root, dir)}: ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}`
+      + `${dirs > 0 ? `, ${dirs} director${dirs === 1 ? 'y' : 'ies'}` : ''}`;
+    return `${summary}\n${lines.join('\n')}`;
   },
 });

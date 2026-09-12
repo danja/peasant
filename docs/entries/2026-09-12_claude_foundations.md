@@ -363,8 +363,62 @@ Whether Ollama's own prebuilt binary runs on the Athlon II is unknown, and is
 the same question as Bun's. If it does not, `llama.cpp` built from source will,
 and the profile is already there.
 
+## Phase 3
+
+`Render`, `Diff`, `Repl`, and a split of the entry point into `src/cli/` — 307
+lines holding five commands became 99 lines of dispatch and a file each. 343
+tests.
+
+`peasant` with no arguments is now an interactive session that keeps the
+conversation between prompts, which is the point: several related questions are
+much cheaper than several one-shot commands, because the model has already read
+the files.
+
+**`Render` is line-buffered, deliberately.** Markdown arrives in pieces — a `**`
+can be split across two deltas, and a fence opener can arrive seconds before its
+closer — so a line is styled once it is complete. The cost is one line of
+latency; the alternatives are re-printing styled text over unstyled text, or
+getting the styling wrong at a chunk boundary. A test renders the same source at
+every chunk size from 1 to 12 and asserts the output is identical, which is the
+same shape of test the SSE parser has, for the same reason.
+
+**Ctrl-C means three different things** depending on when it arrives: mid-request
+it cancels the request and keeps everything; with text typed it clears the line;
+at an empty prompt it leaves. That is a state machine, not a signal handler,
+because getting it wrong loses a conversation that cost real tokens to build.
+
+### Three bugs, all in the seams
+
+**An interrupt could have cost the whole session.** A cancelled turn leaves tool
+calls unanswered, and `Conversation` refuses every later message in that state —
+by design, because some providers reject it and others quietly mishandle it. So
+one Ctrl-C would have poisoned the conversation rather than stopping one
+request. `abandonPending()` answers the orphans and says what happened, which is
+also true.
+
+**`readline` with `terminal: true` writes escapes whether or not anything is
+watching.** Piped, the session emitted cursor-control codes around every prompt
+and echoed the input back — which is exactly the class of thing `Terminal` and
+its guard exist to prevent, arriving from a library that goes around them. It
+follows `input.isTTY` now.
+
+**`close` fires at end of input.** I had treated it as "stop now", which is
+right for Ctrl-D and wrong for a pipe: the last line is buffered and `close`
+fires immediately, so a piped session ran its first turn and discarded every
+remaining line. Leaving deliberately and running out of input are different
+things and now have different flags.
+
+None of the three is visible from a single interactive run, and all three were
+found by piping input at it — which is the cheapest test of a terminal program
+there is.
+
+One smaller thing: the `no-raw-stdout` guard failed on a *comment* in `Repl.js`
+describing the escape sequences readline had emitted. The guard was right to
+look and wrong to match prose, so it strips comments now, as the other scanning
+guards already did.
+
 ## Next
 
-Phase 3, the interactive session — `Repl`, `Render`, `Diff`, and a Ctrl-C that
+Phase 4, the context economy — `Repl`, `Render`, `Diff`, and a Ctrl-C that
 cancels the request rather than the process. Then Phase 4, which is where the
 token arithmetic above gets dealt with.
