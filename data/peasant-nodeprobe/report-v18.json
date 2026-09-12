@@ -1,0 +1,137 @@
+{
+  "date": "2026-09-12",
+  "node": "v18.20.8",
+  "binary": "node-v18.20.8-linux-x64/bin/node",
+  "platform": "linux 7.0.0-31-generic x64",
+  "cpu": "AMD Athlon(tm) II X4 640 Processor",
+  "memoryMB": 14971,
+  "isa": "x86-64-v1 (baseline) -- below Bun and below many prebuilt binaries",
+  "cpuFlags": {
+    "have": [
+      "mmx",
+      "sse",
+      "sse2",
+      "pni",
+      "sse4a",
+      "popcnt",
+      "abm",
+      "cx16"
+    ],
+    "missing": [
+      "ssse3",
+      "sse4_1",
+      "sse4_2",
+      "avx",
+      "avx2",
+      "lzcnt",
+      "bmi1",
+      "bmi2",
+      "fma",
+      "f16c",
+      "aes",
+      "pclmulqdq",
+      "movbe",
+      "xsave"
+    ]
+  },
+  "results": {
+    "startup": {
+      "ok": true,
+      "detail": "v18.20.8",
+      "native": false,
+      "what": "the binary runs at all",
+      "rescue": null
+    },
+    "jit": {
+      "ok": true,
+      "detail": "1660378240",
+      "native": false,
+      "what": "TurboFan optimising a hot loop",
+      "rescue": null
+    },
+    "regexp": {
+      "ok": true,
+      "detail": "200000",
+      "native": false,
+      "what": "irregexp codegen",
+      "rescue": null
+    },
+    "zlib": {
+      "ok": true,
+      "detail": "2068",
+      "native": true,
+      "what": "zlib gzip/gunzip (CRC32 dispatch)",
+      "rescue": null
+    },
+    "brotli": {
+      "ok": true,
+      "detail": "262144",
+      "native": true,
+      "what": "brotli compress/decompress",
+      "rescue": null
+    },
+    "crypto-hash": {
+      "ok": true,
+      "detail": "4aa241482140",
+      "native": true,
+      "what": "OpenSSL SHA-256",
+      "rescue": null
+    },
+    "crypto-aes": {
+      "ok": true,
+      "detail": "65536",
+      "native": true,
+      "what": "OpenSSL AES-256-GCM",
+      "rescue": null
+    },
+    "crypto-ec": {
+      "ok": true,
+      "detail": "32",
+      "native": true,
+      "what": "elliptic curve keygen (TLS handshake path)",
+      "rescue": null
+    },
+    "wasm": {
+      "ok": true,
+      "detail": "5",
+      "native": false,
+      "what": "WebAssembly compile + call",
+      "rescue": null
+    },
+    "atomics": {
+      "ok": true,
+      "detail": "1000",
+      "native": false,
+      "what": "SharedArrayBuffer + Atomics",
+      "rescue": null
+    },
+    "worker": {
+      "ok": true,
+      "detail": "42",
+      "native": false,
+      "what": "worker_threads spawn and message",
+      "rescue": null
+    },
+    "intl": {
+      "ok": true,
+      "detail": "1.234,5",
+      "native": true,
+      "what": "ICU / Intl",
+      "rescue": null
+    },
+    "tls": {
+      "ok": true,
+      "detail": "HTTP 401",
+      "native": true,
+      "what": "HTTPS fetch (undici + TLS)",
+      "rescue": null
+    },
+    "readline": {
+      "ok": true,
+      "detail": "tty=false",
+      "native": false,
+      "what": "readline + tty (the UI depends on this)",
+      "rescue": null
+    }
+  }
+}
