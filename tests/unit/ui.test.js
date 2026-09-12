@@ -159,3 +159,32 @@ test('a write says whether it creates or replaces', () => {
   assert.match(renderWrite(term, { path: 'a.js', content: 'x' })[0], /^create a\.js$/);
   assert.match(renderWrite(term, { path: 'a.js', content: 'x', existed: true })[0], /^replace a\.js$/);
 });
+
+// --- Repl multiline --------------------------------------------------------
+
+test('a trailing backslash continues the line', async () => {
+  const { continues, stripContinuations } = await import('../../src/ui/Repl.js');
+  assert.equal(continues('one \\', 'one \\'), true);
+  assert.equal(continues('one', 'one'), false);
+  assert.equal(stripContinuations('one \\\ntwo'), 'one \ntwo');
+});
+
+test('an unclosed code fence continues, and a closed one does not', async () => {
+  // Pasting a function into a prompt and having it become eight separate turns
+  // is both useless and expensive.
+  const { continues } = await import('../../src/ui/Repl.js');
+  assert.equal(continues('```js', '```js'), true);
+  assert.equal(continues('const x = 1;', '```js\nconst x = 1;'), true);
+  assert.equal(continues('```', '```js\nconst x = 1;\n```'), false);
+});
+
+test('a fence indented inside a list still counts', async () => {
+  const { continues } = await import('../../src/ui/Repl.js');
+  assert.equal(continues('  ```', '  ```'), true);
+});
+
+test('a line mentioning backticks mid-sentence is not a fence', async () => {
+  const { continues } = await import('../../src/ui/Repl.js');
+  assert.equal(continues('use the ``` fence syntax', 'use the ``` fence syntax'), false,
+    'a fence has to start the line');
+});

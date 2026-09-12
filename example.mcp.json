@@ -1,0 +1,32 @@
+{
+  "_comment": [
+    "Copy to ~/.config/peasant/mcp.json for servers you always want, or to",
+    ".peasant/mcp.json inside a repository for servers specific to it. The",
+    "project file wins by name, so a repository can replace a global server",
+    "without disabling it everywhere. Run 'peasant mcp' to see what loaded.",
+    "",
+    "This is the same shape every other MCP client uses, so a block can be",
+    "copied from an existing configuration without translation."
+  ],
+
+  "mcpServers": {
+    "_stdio_example": {
+      "_comment": "A local server, spoken to over its stdin and stdout.",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/some/path"],
+      "env": { "EXAMPLE_TOKEN": "" },
+      "disabled": true
+    },
+
+    "_http_example": {
+      "_comment": [
+        "A remote server over Streamable HTTP. https is required unless the",
+        "host is loopback: headers here may carry a token, and a token must",
+        "not cross a network in plaintext."
+      ],
+      "url": "https://example.com/mcp",
+      "headers": { "authorization": "Bearer replace-me" },
+      "disabled": true
+    }
+  }
+}

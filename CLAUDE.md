@@ -60,18 +60,24 @@ zero-dependency and no-native rules still matter, because they are what stop a
   `RateLimiter.js`, `Router.js`, `ProfileRegistry.js` and `profiles/` (one file per
   provider)
 - `src/agent/` — `Loop.js`, `Conversation.js`, `ContextBudget.js`, `Compactor.js`,
-  `TokenEstimator.js`
+  `TokenEstimator.js` (measured constants, calibrated at runtime), `prompt.js`,
+  `context-files.js` (`PEASANT.md` and `AGENTS.md`, capped and folded into the
+  system prompt)
 - `src/tools/` — `Tool.js` (the interface), `schema.js` (the JSON Schema subset),
   `registry.js` (the one list), `paths.js` (workspace confinement), one file per
   tool, and `search/` — two interchangeable grep engines behind one door
 - `src/permission/` — `Policy.js`, `Prompt.js`
-- `src/session/` — `Store.js` (JSONL under `~/.peasant/sessions`)
+- `src/session/` — `Store.js`: append-only JSONL under `~/.peasant/sessions`,
+  one record per line, with a `reset` record where compaction replaces history
 - `src/ui/` — `Terminal.js` (the only module that writes to stdout), `Ansi.js`
   (the one list of escape codes), `Repl.js`, `Render.js`, `Diff.js`
 - `src/cli/` — one file per command, plus `EventPrinter.js` (agent events to
-  terminal), `context.js` (assembling providers, policy and workspace) and
-  `agent.js`. `bin/peasant.js` is dispatch only.
-- `src/mcp/` — `Client.js`, stdio JSON-RPC
+  terminal), `context.js` (assembling providers, policy and workspace),
+  `agent.js` and `commands.js` (custom slash commands from files).
+  `bin/peasant.js` is dispatch only.
+- `src/mcp/` — `JsonRpc.js`, `StdioTransport.js`, `HttpTransport.js`,
+  `Client.js`, `adapt.js` (server tools become peasant tools), `config.js`,
+  `connect.js`. Both transports; see `docs/mcp.md`
 - `tests/guard/` — the rules below, enforced; `tests/unit/`, `tests/compat/`, `tests/live/`
 
 The design is `docs/architecture.md`; the phased plan is `docs/plan.md`; the measured
@@ -97,6 +103,7 @@ being broken — and if the answer is "a careful reader", write the check instea
 | All terminal output goes through `src/ui/Terminal.js` | `tests/guard/no-raw-stdout.test.js` |
 | A tool's advertised schema is the schema that validates | `tests/guard/tool-schema.test.js` |
 | The two search engines give byte-identical answers | `tests/unit/search-parity.test.js` |
+| An MCP tool not declared read-only is treated as mutating | `tests/unit/mcp.test.js` |
 | Every tool declares `mutates`; the permission policy reads nothing else | same |
 | No tool reads or writes outside the workspace | `tests/unit/tools.test.js` |
 

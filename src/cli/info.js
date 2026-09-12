@@ -8,9 +8,10 @@ import { build } from './context.js';
 import { estimateRequest } from '../agent/TokenEstimator.js';
 import { specs } from '../tools/registry.js';
 import { systemPrompt } from '../agent/prompt.js';
+import { loadContext, renderContext } from '../agent/context-files.js';
 
 export async function providers(term, env, { signal } = {}) {
-  const { clients, failed, skipped, prefs, router } = await build(term, env, { signal });
+  const { clients, failed, skipped, prefs, router } = await build(term, env, { signal, mcp: false });
 
   term.line(prefs.rotate
     ? term.paint(`rotation on — a blocked provider is skipped after ${prefs.maxWaitMs} ms; order below is preference order`, 'grey')
@@ -37,7 +38,7 @@ export async function providers(term, env, { signal } = {}) {
 }
 
 export async function models(term, env, { signal } = {}) {
-  const { clients } = await build(term, env, { signal, quiet: true });
+  const { clients } = await build(term, env, { signal, quiet: true, mcp: false });
   for (const client of clients) {
     const ids = await client.listModels({ signal });
     const chat = ids.filter((id) => !client.profile.nonChat.some((re) => re.test(id)));
@@ -68,13 +69,18 @@ export async function doctor(term, env, pkg, { signal } = {}) {
 
   term.line(term.paint('cost per turn', 'bold'));
   const toolSpecs = specs();
-  const sys = systemPrompt({ root: process.cwd() });
+  const contextFiles = loadContext({ root: process.cwd(), env });
+  const sys = systemPrompt({ root: process.cwd(), context: renderContext(contextFiles.found) });
   const fixed = estimateRequest({ messages: [{ role: 'system', content: sys }], tools: toolSpecs });
   term.line(term.paint(
     `  ~${fixed} tokens before anything is said (${toolSpecs.length} tool schemas + system prompt),`
     + ' resent on every turn', 'grey'));
   term.line(term.paint(
     '  the schemas alone measured 738 tokens against a live provider — see docs/providers.md', 'grey'));
+  for (const f of contextFiles.found) {
+    term.line(term.paint(`  including ${f.chars} chars from ${f.file}`, 'grey'));
+  }
+  for (const note of contextFiles.notes) term.line(term.paint(`  ${note}`, 'yellow'));
   term.line('');
 
   term.line(term.paint('configuration', 'bold'));

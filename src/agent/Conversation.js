@@ -85,9 +85,21 @@ export class Conversation {
   // For the session store, and for compaction in Phase 4.
   toJSON() { return this.#messages; }
 
+  // Replays a stored conversation, *including* which tool calls are still
+  // unanswered. Pushing the messages without rebuilding that state would leave
+  // a resumed conversation happily accepting a new message on top of an
+  // orphaned tool call -- and sending a message list providers reject.
   static fromJSON(messages) {
     const c = new Conversation();
-    for (const m of messages) c.#messages.push(m);
+    for (const m of messages) {
+      c.#messages.push(m);
+      if (m.role === 'assistant' && m.tool_calls?.length) {
+        c.#pending = new Set(m.tool_calls.map((call) => call.id));
+      } else if (m.role === 'tool' && c.#pending) {
+        c.#pending.delete(m.tool_call_id);
+        if (c.#pending.size === 0) c.#pending = null;
+      }
+    }
     return c;
   }
 }

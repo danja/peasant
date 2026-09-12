@@ -498,9 +498,157 @@ place, and it now also scans every shipped file and asserts the strip preserves
 length and line count — so a construct that breaks the scan shows up as a
 scanner failure rather than as a mystery in an unrelated guard.
 
+## Sessions, and two daily annoyances
+
+`session/Store` finished Phase 4. Append-only JSONL, one record per line —
+deliberately not a snapshot rewritten each turn, because a crash mid-write
+cannot then corrupt what came before, and appending is O(1) where rewriting is
+O(conversation). Compaction is the awkward case, since it *replaces* history
+rather than adding to it, so it writes a `reset` record and replay starts again
+from there: still append-only, still crash-safe.
+
+`peasant --resume` continues the last session in this directory, `peasant
+sessions` lists them. Verified across processes: one session was told to
+remember a word, and a second process resumed it and recalled it.
+
+That verification is what found the bug. The listing said **2 messages** where
+there should have been three — the loop recorded from the conversation's current
+length rather than from zero, so the *system message*, written before anything
+else, was never saved. A resumed session had no instructions at all and nothing
+said so. It is the kind of thing that would have shown up weeks later as "the
+model behaves differently after a resume".
+
+A second, deeper one followed: `Conversation.fromJSON` pushed messages without
+rebuilding which tool calls were still unanswered. A session interrupted
+mid-turn would restore, accept a new message on top of an orphaned tool call,
+and send a message list providers reject. Replay reconstructs that state now.
+
+Then the two things that actually hurt daily use. **Multiline input** — pasting a
+function and having it become eight turns is useless and expensive; a trailing
+`\` or an unclosed fence continues a line, both explicit, because guessing at
+blank lines is how a REPL becomes unpredictable. And **`run` persistence**, so a
+long non-interactive task that fails halfway can be resumed rather than
+restarted.
+
+### The optimisation I decided not to make
+
+The tool schemas cost 738 tokens on every turn, 78% of the fixed cost, and were
+the obvious next target. Measuring first: of 4,090 characters only about 300 is
+repetition, so trimming descriptions would save perhaps seven per cent — and
+those descriptions are the guidance that stops the model reaching for `bash`
+when `grep` would do. Costing an extra turn to save 50 tokens is a bad trade at
+942 tokens a turn.
+
+The real saving would be sending a subset, but a task that turns out to need
+`write` after being told it has no `write` is worse than the tokens. Left alone,
+deliberately, with the reasoning in `TODO.md` so it is not rediscovered from
+scratch.
+
+## Phase 5: MCP, both transports
+
+614 lines across seven files, no dependency. It is JSON-RPC 2.0 and a handshake,
+and a dependency that speaks to arbitrary external servers is the last one worth
+taking on trust. 438 tests.
+
+**The SSE parser paid for itself somewhere it was not designed for.** Streamable
+HTTP replies are *either* a single JSON object *or* an SSE stream — the server
+chooses, by content type, and a client handling only one works against half the
+servers it meets. The framing problem is identical to a streamed completion,
+down to a `data:` line splitting mid-UTF-8, so `src/provider/SseParser.js` was
+reused unchanged. That is the first time a piece of this codebase has been
+useful outside the problem it was written for, and it happened because the
+parser was built around the framing rather than around completions.
+
+Only tools are implemented. Resources and prompts are absent rather than
+half-present, so nothing pretends.
+
+### What the transports have to get right
+
+Each of these produces a puzzling failure if missed, and all are in the tests:
+
+- the `mcp-session-id` a server assigns on `initialize` and expects echoed on
+  everything after — without it, a server that has just finished initialising
+  answers "not initialised";
+- the `notifications/initialized` notification, which servers enforce: skip it
+  and the handshake is unfinished and everything after is refused;
+- `tools/list` pagination, because a server with many tools does paginate and a
+  client reading the first page silently loses the rest;
+- a stdio server's stderr never reaching the protocol stream, because many
+  servers log there and a log line parsed as a message fails confusingly.
+
+### The decision that matters
+
+**Anything an MCP server does not declare read-only is treated as mutating.**
+`annotations.readOnlyHint` is optional in MCP, so its absence has to mean
+something, and the two possible meanings have very different costs: guessing
+"read-only" wrongly means somebody else's code deleting something without
+asking, guessing "mutating" wrongly means one extra prompt.
+
+The rest of the adaptation is about being invisible. A server's tools become
+`Tool` objects and nothing downstream can tell: the agent loop, the permission
+policy and the token estimator all treat them exactly as they treat `read` or
+`bash`. Names are sanitised to `mcp_<server>_<tool>` with collisions kept apart
+rather than overwritten — a silent overwrite means calls going to the wrong
+server, which is hard to notice and annoying to diagnose. Schemas pass through
+as the server gave them, validated loosely, because the server knows what it
+accepts and strict validation would refuse a good schema for using a keyword
+this small subset does not implement.
+
+Verified live: a server in `.peasant/mcp.json`, its tools offered alongside the
+seven built in, and the model calling one and getting the result back.
+
+All of it passed on the first run, which after the last few days is slightly
+suspicious — but the fake servers deliberately do the awkward things (stderr
+logging, pagination, both HTTP reply modes, a tool that fails in-band), so the
+tests are at least asking the right questions.
+
+## Context files and commands
+
+Both small, both immediately useful, and the first is the cheapest thing
+available for improving output on a weak model: telling it the conventions of
+the repository it is in beats any amount of prompt engineering in the abstract.
+
+`PEASANT.md` in a repository, or `AGENTS.md` — the cross-tool convention many
+repositories already have — plus a personal one that applies everywhere.
+**`CLAUDE.md` is deliberately not read.** It is addressed to a different agent
+with different tools, and following instructions written for someone else is
+worse than having none. That was a real temptation: this repository has a good
+one, and reading it would have demonstrated the feature nicely and been wrong.
+
+The cap matters more than the feature. Everything in these files is resent on
+every turn against 8,000 tokens a minute, so 8,000 characters is the ceiling,
+truncation says so, and the session header states the size. A context file
+nobody has read the size of is a tax on every request — and the one number this
+project has learned to distrust is the one nobody measured.
+
+Context is *appended* to the system prompt rather than prepended: the tool rules
+are what make the harness work at all, and a project file should not be able to
+displace them by being read first. Each block says which file it came from,
+because a model given instructions with no provenance cannot weigh them against
+the task it was actually asked to do.
+
+Custom commands are a markdown file under `.peasant/commands/`: `review.md` is
+`/review`, a leading `# ` line is its description, `$ARGUMENTS` is substituted
+or appended. The implementation detail worth stating is that **a command is a
+prompt, not a branch** — it expands and then takes exactly the same path as
+anything typed, so nothing in the loop knows commands exist.
+
+Verified live: a `PEASANT.md` requiring every answer to begin with a particular
+word, honoured across two turns and a tool call; and a `/count` command that ran
+the glob tool and answered correctly.
+
+One collision on the way: `session.js` already had a local `expand()` for path
+expansion, and importing the commands' `expand()` shadowed it. `node --check`
+caught it immediately, which is the entire argument for a syntax check being the
+cheapest thing in the loop.
+
 ## Next
 
-`session/Store` — the remaining Phase 4 piece. Neither `run` nor the session
+The NVIDIA and Together provider profiles are a file each when keys exist. MCP
+resources and prompts stay absent rather than half-implemented. The open
+question is what to do about context files being read once at startup — editing
+`PEASANT.md` mid-session has no effect until a restart, which will surprise
+someone. Neither `run` nor the session
 persists anything, so closing the terminal loses the conversation and everything
 it cost to build.
 

@@ -9,7 +9,9 @@ export async function ask(term, env, prompt, { signal }) {
     return 64;
   }
 
-  const { router } = await build(term, env, { signal });
+  // No tools are sent, so there is nothing for an MCP server to contribute
+  // and no reason to pay for starting one.
+  const { router } = await build(term, env, { signal, mcp: false });
   const printer = new EventPrinter(term, { showTools: false });
   let model = null;
 

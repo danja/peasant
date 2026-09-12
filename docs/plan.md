@@ -143,11 +143,23 @@ two-turn session read a file, answered about it, then edited it.
   turns, against Groq's 8,000/minute. The system prompt and seven tool schemas
   go out on every turn. This is what Phase 4 is for.
 
-## Phase 4 — Context economy — **mostly complete**
+## Phase 4 — Context economy — **complete**
 
-`TokenEstimator`, `ContextBudget`, `Compactor`, and `bin/probe-tokens.js` which
-measured the constants they rest on. Tool-result truncation was already in
-`Tool.invoke`. **`session/Store` is the piece still outstanding.**
+`TokenEstimator`, `ContextBudget`, `Compactor`, `session/Store`, and
+`bin/probe-tokens.js` which measured the constants the first of them rests on.
+Tool-result truncation was already in `Tool.invoke`.
+
+Sessions are kept as append-only JSONL under `~/.peasant/sessions`, one record
+per line. Not a snapshot rewritten each turn, for two reasons: a crash mid-write
+cannot corrupt what came before, and appending is O(1) where rewriting is
+O(conversation). Compaction is the awkward case because it *replaces* history,
+so it writes a `reset` record and replay starts again from there — still
+append-only, still crash-safe.
+
+`peasant --resume` continues the last session in this directory, `--resume <id>`
+a named one, and `peasant sessions` lists them. Resume closes off any tool calls
+left unanswered by an interruption, because a conversation in that state refuses
+every later message.
 
 **Verified live:** a session at `PEASANT_COMPACT_AT=0.15` compacted twice and
 shrank both times, and the estimator settled at a 0.90 correction after sixteen
@@ -175,6 +187,19 @@ The measurement that drove the design: **942 tokens of fixed cost per turn**,
   was read as a template literal, swallowing every comment after it — which
   surfaced as the provider guard reporting a name that was only ever in prose.
   `scanSource` recognises regex literals now.
+
+### After Phase 4
+
+Two things that hurt daily use, both now done:
+
+- **Multiline input.** Pasting a function into a prompt and having it become
+  eight separate turns is useless and expensive. A trailing `\` or an unclosed
+  ``` fence continues a line — both explicit, because guessing whether a blank
+  line ends a block is how a REPL becomes unpredictable.
+- **`peasant run` persistence.** A long task that fails halfway cost real tokens
+  to get that far and is worth resuming.
+
+And `README.md`, with every figure taken from the system.
 
 ## Phase 5 — Extensibility
 

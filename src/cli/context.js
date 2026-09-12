@@ -10,8 +10,11 @@ import { workspaceRoot } from '../tools/paths.js';
 import { TokenEstimator } from '../agent/TokenEstimator.js';
 import { ContextBudget } from '../agent/ContextBudget.js';
 import { Compactor } from '../agent/Compactor.js';
+import { TOOLS } from '../tools/registry.js';
+import { connectServers } from '../mcp/connect.js';
+import { loadContext, renderContext } from '../agent/context-files.js';
 
-export async function build(term, env, { allowAll = false, signal, quiet = false } = {}) {
+export async function build(term, env, { allowAll = false, signal, quiet = false, mcp = true } = {}) {
   const root = workspaceRoot();
 
   const { router, clients, failed, skipped, prefs } = await connect(env, {
@@ -31,7 +34,37 @@ export async function build(term, env, { allowAll = false, signal, quiet = false
   const budget = new ContextBudget({ estimator, compactAt: prefs.compactAt });
   const compactor = new Compactor({ router, estimator });
 
-  return { root, router, clients, failed, skipped, prefs, policy, prompt, estimator, budget, compactor };
+  // MCP servers are other people's processes and other people's hosts. One
+  // being broken is a normal Tuesday and must not stop peasant starting.
+  let mcpClients = [];
+  let mcpTools = [];
+  if (mcp) {
+    const result = await connectServers({
+      env, cwd: root, signal,
+      onProgress: (m) => { if (!quiet) term.status(term.paint(`  ${m}...`, 'grey')); },
+    });
+    term.clearStatus();
+    mcpClients = result.clients;
+    mcpTools = result.tools;
+    for (const f of result.failed) {
+      term.error(term.paint(`  mcp ${f.name}: ${f.error}`, 'yellow'));
+    }
+  }
+
+  // Standing instructions from configuration, folded into the system prompt.
+  // Everything here is resent on every turn, so its size is reported rather
+  // than absorbed silently.
+  const contextFiles = loadContext({ root, env });
+  for (const note of contextFiles.notes) term.error(term.paint(`  ${note}`, 'yellow'));
+
+  return {
+    root, router, clients, failed, skipped, prefs, policy, prompt,
+    estimator, budget, compactor,
+    mcpClients, mcpTools,
+    tools: [...TOOLS, ...mcpTools],
+    contextFiles,
+    context: renderContext(contextFiles.found),
+  };
 }
 
 // A mutating tool with mode `ask` and no terminal cannot be resolved: hanging

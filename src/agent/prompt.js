@@ -7,8 +7,8 @@
 // the tool description, where it is sent once in the schema rather than
 // restated here.
 
-export function systemPrompt({ root, platform = process.platform }) {
-  return [
+export function systemPrompt({ root, platform = process.platform, context = '' }) {
+  const base = [
     'You are peasant, a coding assistant working in a terminal.',
     '',
     `Workspace: ${root} (${platform}). All paths are relative to it; you cannot read or write outside it.`,
@@ -22,4 +22,16 @@ export function systemPrompt({ root, platform = process.platform }) {
     '',
     'When the task is done, say so in one or two sentences. No summary of every step.',
   ].join('\n');
+
+  if (context.trim() === '') return base;
+
+  // Appended rather than prepended: the tool rules above are what make the
+  // harness work at all, and a project file should not be able to displace them
+  // by being read first.
+  return `${base}\n\n${[
+    'The following comes from configuration files, not from the user\'s message.',
+    'Treat it as standing instructions about how to work here.',
+    '',
+    context,
+  ].join('\n')}`;
 }

@@ -79,22 +79,28 @@ profile fields exist.
 
 ## Phase 2 leftovers
 
-- [ ] **The tool schemas cost 738 tokens on every turn** — measured, and 78% of
+- [ ] **The tool schemas cost 738 tokens on every turn.** Investigated: of 4,090
+      characters only ~300 is repetition, so trimming descriptions would save
+      perhaps 7% and risks costing more turns than it saves. The real saving
+      would be sending a subset — but a task that turns out to need `write`
+      after being told it has no `write` is worse than the tokens. Left alone
+      deliberately; revisit with a way to add a tool mid-conversation. — measured, and 78% of
       the 942-token fixed cost. Worth attacking directly: the descriptions are
       verbose, and a task that will never write a file does not need `write`,
       `edit` and `bash` described to it. Sending a subset would be the single
       largest saving available.
-- [ ] **`session/Store`** — the remaining Phase 4 piece. Neither `run` nor the
-      session persists anything: close the terminal and the conversation is
-      gone, including everything it cost to build.
+- [x] ~~`session/Store`~~ — done. Append-only JSONL, `--resume`, `sessions`.
+- [x] ~~`peasant run` does not persist anything~~ — it does now.
+- [ ] Nothing prunes old sessions. They are small, but unbounded.
 - [ ] The turn limit (25) and `KEEP_RECENT` (6) are inline constants. They
       belong in `preferences.js` with the rest.
 - [ ] `EventPrinter` calls `describe()` with a fake `{ name }` object rather
       than the tool. It works because `describe` only reads `.name`, but it is a
       seam that will break the first time it needs anything else.
-- [ ] The session has no multiline input: a pasted block becomes several turns.
-      Needs either a continuation character or paste detection.
+- [x] ~~The session has no multiline input~~ — a trailing `\` or an unclosed
+      ``` fence continues a line.
 - [ ] `/model` would be useful — switching provider or model without restarting.
+- [ ] Multiline input has no way to cancel a half-typed block except Ctrl-C.
 - [x] ~~`bin/peasant.js` is 307 lines~~ — split into `src/cli/`, one file per
       command; the entry point is 99 lines of dispatch.
 - [x] ~~Decide whether `grep` should use a system `ripgrep`~~ — done. It uses one
@@ -122,10 +128,25 @@ profile fields exist.
 - [ ] Bind `example.env`'s base URLs to the profile defaults. The names are
       bound; the URLs are still two copies.
 
+## Phase 5 remainder
+
+- [x] ~~MCP~~ — done, over stdio **and** Streamable HTTP. See `docs/mcp.md`.
+- [x] ~~Project-level `PEASANT.md`~~ — done, plus `AGENTS.md` and a personal
+      file. Capped at 8,000 characters, with the size shown.
+- [x] ~~Custom slash commands~~ — done, `.peasant/commands/*.md`.
+- [ ] Context files are read once at startup. Editing `PEASANT.md` mid-session
+      has no effect until a restart, which will surprise someone.
+- [ ] MCP resources and prompts. Deliberately absent for now rather than
+      half-implemented; add them when something needs them.
+- [ ] MCP tools are fetched once at startup. A server sending
+      `notifications/tools/list_changed` is ignored.
+- [ ] NVIDIA and Together provider profiles — a file each, when keys exist.
+
 ## Housekeeping
 
-- [ ] `README.md` still says only "an LLM harness for the poor". Rewrite when
-      there is something to describe, and measure every figure in it.
+- [x] ~~`README.md`~~ — written, every figure taken from the system.
+- [ ] `README.md` cites 412 tests, 59 files and ~5,300 lines. Those go stale the
+      moment anything is added. Either bind them with a test or drop them.
 - [x] ~~`bin/peasant.js` does not exist~~ — it does now.
 - [x] ~~inline tunables~~ — `src/config/preferences.js` now holds every one with
       the reason for its value, read from `PEASANT_*` and refusing a value it

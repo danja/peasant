@@ -6,8 +6,14 @@ import { Loop } from '../agent/Loop.js';
 import { TOOLS } from '../tools/registry.js';
 import { EventPrinter } from './EventPrinter.js';
 
-export function makeLoop({ router, policy, prompt, root, budget, compactor, estimator }) {
-  return new Loop({ router, tools: TOOLS, policy, prompt, root, budget, compactor, estimator });
+export function makeLoop({ router, policy, prompt, root, budget, compactor, estimator, tools }) {
+  return new Loop({
+    router,
+    // MCP tools are indistinguishable from built-in ones by the time they get
+    // here, which is the point of the adapter.
+    tools: tools ?? TOOLS,
+    policy, prompt, root, budget, compactor, estimator,
+  });
 }
 
 export async function runTurn(term, loop, conversation, { signal, router }) {

@@ -14,6 +14,8 @@ import { ask } from '../src/cli/ask.js';
 import { run } from '../src/cli/run.js';
 import { session } from '../src/cli/session.js';
 import { providers, models, doctor } from '../src/cli/info.js';
+import { sessions } from '../src/cli/sessions.js';
+import { mcp } from '../src/cli/mcp.js';
 
 const PKG = JSON.parse(fs.readFileSync(
   path.resolve(fileURLToPath(import.meta.url), '../../package.json'), 'utf8',
@@ -22,6 +24,9 @@ const PKG = JSON.parse(fs.readFileSync(
 const USAGE = `peasant ${PKG.version} -- ${PKG.description}
 
   peasant                  start an interactive session
+  peasant --resume [id]    continue the last session in this directory, or one by id
+  peasant sessions         list kept sessions
+  peasant mcp              list configured MCP servers and the tools they offer
   peasant ask <prompt>     ask a question, streamed -- no tools, no file access
   peasant run <task>       work on a task, using the tools
   peasant providers        show which providers are configured and what they report
@@ -51,7 +56,15 @@ async function main(argv) {
 
   const env = load();
   const allowAll = argv.includes('--allow-all');
-  const rest = argv.filter((a) => !a.startsWith('--'));
+  const resumeAt = argv.indexOf('--resume');
+  // `--resume` alone means the latest here; `--resume <id>` names one. The id
+  // is only the next argument if it is not itself a flag or a command.
+  const resume = resumeAt === -1
+    ? null
+    : (argv[resumeAt + 1] && !argv[resumeAt + 1].startsWith('--') && /^\d{8}T\d{6}-/.test(argv[resumeAt + 1])
+      ? argv[resumeAt + 1]
+      : true);
+  const rest = argv.filter((a) => !a.startsWith('--') && a !== resume);
   const [command, ...words] = rest;
 
   const controller = new AbortController();
@@ -65,11 +78,13 @@ async function main(argv) {
 
   try {
     switch (command) {
-      case undefined: return await session(term, env, { allowAll });
+      case undefined: return await session(term, env, { allowAll, resume });
       case 'ask': return await ask(term, env, words.join(' '), { signal });
       case 'run': return await run(term, env, words.join(' '), { allowAll, signal });
       case 'providers': return await providers(term, env, { signal });
       case 'models': return await models(term, env, { signal });
+      case 'sessions': return await sessions(term, env);
+      case 'mcp': return await mcp(term, env, { signal });
       case 'doctor': return await doctor(term, env, PKG, { signal });
       default:
         term.error(`unknown command ${JSON.stringify(command)}\n\n${USAGE}`);

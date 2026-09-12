@@ -16,6 +16,24 @@ import path from 'node:path';
 
 const MAX_HISTORY = 500;
 
+// A line ending in a backslash continues, as a shell does.
+const CONTINUATION = /\\$/;
+
+// So does an unclosed ``` fence: pasting a code block is the common case, and
+// counting fences is unambiguous where guessing at blank lines is not.
+function fencesOpen(text) {
+  const fences = text.match(/^\s*(?:```|~~~)/gm) ?? [];
+  return fences.length % 2 === 1;
+}
+
+export function continues(line, joined) {
+  return CONTINUATION.test(line) || fencesOpen(joined);
+}
+
+export function stripContinuations(text) {
+  return text.replace(/\\\n/g, '\n');
+}
+
 export class Repl {
   #terminal;
   #input;
@@ -76,8 +94,26 @@ export class Repl {
 
     // The async iterator pauses the input while the body is awaiting, which is
     // what keeps a pipe from delivering every line at once into one turn.
+    let pending = [];
+
     for await (const line of this.#rl) {
-      const trimmed = line.trim();
+      // Multiline input, because pasting a function into a prompt and having it
+      // become eight separate turns is both useless and expensive.
+      //
+      // Two ways in, both explicit: a trailing backslash, and an unclosed code
+      // fence. Neither guesses -- guessing whether a blank line ends a block is
+      // how a REPL becomes impossible to predict.
+      pending.push(line);
+      const joined = pending.join('\n');
+      if (continues(line, joined)) {
+        this.#setPrompt(isTty ? this.#terminal.paint('… ', 'grey') : '');
+        this.#rl.prompt();
+        continue;
+      }
+      this.#setPrompt(isTty ? this.#terminal.paint('> ', 'bold') : '');
+
+      const trimmed = stripContinuations(joined).trim();
+      pending = [];
       if (trimmed === '') { this.#rl.prompt(); continue; }
 
       this.#pushHistory(trimmed);
@@ -107,6 +143,10 @@ export class Repl {
 
     this.#saveHistory();
     this.#rl.close();
+  }
+
+  #setPrompt(prompt) {
+    this.#rl.setPrompt(prompt);
   }
 
   #onInterrupt() {

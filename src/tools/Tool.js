@@ -15,7 +15,11 @@ export class ToolError extends Error {
   }
 }
 
-export function defineTool({ name, description, parameters, mutates, run }) {
+// `external` is for schemas peasant did not write -- an MCP server's, say.
+// They are passed to the provider as they came, because the server knows what
+// it accepts, and only checked loosely here: strict validation would refuse a
+// perfectly good schema for using a keyword this subset does not implement.
+export function defineTool({ name, description, parameters, mutates, run, external = false }) {
   if (!name || !/^[a-z][a-z0-9_]*$/.test(name)) {
     throw new Error(`tool name ${JSON.stringify(name)} must be lower snake case`);
   }
@@ -24,13 +28,20 @@ export function defineTool({ name, description, parameters, mutates, run }) {
     throw new Error(`tool ${name}: mutates must be declared explicitly -- the permission policy reads it`);
   }
   if (typeof run !== 'function') throw new Error(`tool ${name}: run must be a function`);
-  assertValidSchema(parameters, `${name}.parameters`);
+  if (external) {
+    if (!parameters || typeof parameters !== 'object') {
+      throw new Error(`tool ${name}: parameters must be an object`);
+    }
+  } else {
+    assertValidSchema(parameters, `${name}.parameters`);
+  }
 
   return Object.freeze({
     name,
     description,
     parameters,
     mutates,
+    external,
 
     // What goes in the provider request. One place, so every provider gets the
     // same declaration.
