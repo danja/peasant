@@ -1,0 +1,15 @@
+Provider endpoint probe, 2026-09-12.
+curl -s -o /dev/null -w '%{http_code}' -m 15 -H 'Authorization: Bearer probe-invalid' <url>
+
+https://api.groq.com/openai/v1/models                          401
+https://api.mistral.ai/v1/models                               401
+https://api.cerebras.ai/v1/models                              401
+https://openrouter.ai/api/v1/models                            200   (catalogue is public)
+https://generativelanguage.googleapis.com/v1beta/openai/models 400   {"error":{"code":400,"message":"Please pass a valid API key","status":"INVALID_ARGUMENT"}}
+https://router.huggingface.co/v1/models                        200
+https://integrate.api.nvidia.com/v1/models                     200
+https://api.together.xyz/v1/models                             401
+https://models.inference.ai.azure.com/models                   000   (host does not resolve -- GitHub Models, retired)
+https://models.github.ai/inference/models                      410   Gone
+
+OpenRouter catalogue on this date: 445 models total, 19 with a ":free" suffix.

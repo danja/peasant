@@ -7,6 +7,8 @@
   is, measured
 - [`runtime-baseline.md`](runtime-baseline.md) — which Node builds run on that
   CPU, and how that was measured
+- [`providers.md`](providers.md) — what the free-tier providers actually do,
+  measured from their own responses
 - [`danja-todo.md`](danja-todo.md) — what the user needs to do
 - [`entries/`](entries/) — worklog, `YYYY-MM-DD_claude_title.md`
 - [`raw/`](raw/) — unedited probe output, kept so every figure above is traceable

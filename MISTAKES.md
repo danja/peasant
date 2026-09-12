@@ -2,6 +2,30 @@
 
 Newest first. What happened, the root cause, and what now prevents it.
 
+## 2026-09-12 — A documented figure written into the house rules as if it were a fact
+
+**What happened.** `CLAUDE.md` stated, as part of the project's specification,
+that "Groq's free tier is roughly 30 RPM / **6,000 TPM** / 14,400 RPD". The
+figure came from published summaries and was never measured. On the first run of
+`bin/probe-providers.js` the account reported `x-ratelimit-limit-tokens: 8000`,
+and Mistral reported **625,000** tokens/minute — 78x Groq, where the same
+summaries had described it vaguely as "roughly 1 req/s". Two of the three numbers
+that the context-economy design rests on were wrong, and one was wrong by a
+factor of 78 in the direction that changes which provider should be tried first.
+
+**Root cause.** A number taken from a search result was repeated in a document
+whose whole purpose is to be believed. `docs/plan.md` had correctly labelled
+these as published rather than measured; `CLAUDE.md` dropped the qualifier, and
+the qualifier was the important part.
+
+**Prevention.** Every figure in the affected files now names its source and its
+date, and the provider limits carry `MEASURED 2026-09-12` with
+`docs/providers.md` and `docs/raw/2026-09-12_providers/` behind them. The
+architectural rule that already existed — never hardcode a rate limit, read it
+from `x-ratelimit-*` at runtime — is what kept this from reaching code. It was
+written for exactly this reason and it earned its place on the first contact with
+a real provider.
+
 ## 2026-09-12 — The dependency guard destroyed the text it was meant to read
 
 **What happened.** `tests/guard/lib/scan.js` blanked comment *and* string bodies

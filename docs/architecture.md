@@ -51,7 +51,8 @@ next configured provider that has budget. This is what makes a free-tier harness
 usable rather than a novelty, and it is why provider configuration is a *list*
 rather than a single setting.
 
-**`ContextBudget` and `Compactor`.** At 6,000 TPM the harness has to be stingy
+**`ContextBudget` and `Compactor`.** At 8,000 TPM — Groq's measured ceiling —
+the harness has to be stingy
 by construction, not by a counter bolted on afterwards: tool results truncated
 with a head/tail window and a byte count, file reads offset-and-limited by
 default, `grep` returning matches rather than whole files, compaction triggered
@@ -81,6 +82,6 @@ agent loop end to end against a local fake OpenAI-compatible server built on
 talks to real providers, deliberately, never in a sweep.
 
 Mocking the provider is the one deliberate exception to testing against live
-services, and it follows from the specification: a 6,000 TPM ceiling is a budget
+services, and it follows from the specification: an 8,000 TPM ceiling is a budget
 a test suite would exhaust in seconds. Everything that is not the provider — the
 filesystem, the shell, the session store — is tested for real.

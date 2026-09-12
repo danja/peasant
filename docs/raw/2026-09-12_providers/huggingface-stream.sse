@@ -1,0 +1,20 @@
+data: {"id":"chatcmpl-5e38c167-8961-4b11-b326-df6786e6546e","object":"chat.completion.chunk","created":1789217730,"model":"qwen3-coder-30b-a3b-instruct","choices":[{"index":0,"delta":{"role":"assistant","content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-5e38c167-8961-4b11-b326-df6786e6546e","object":"chat.completion.chunk","created":1789217730,"model":"qwen3-coder-30b-a3b-instruct","choices":[{"index":0,"delta":{"content":"One"},"logprobs":null,"finish_reason":null,"token_ids":null}],"usage":null}
+
+data: {"id":"chatcmpl-5e38c167-8961-4b11-b326-df6786e6546e","object":"chat.completion.chunk","created":1789217730,"model":"qwen3-coder-30b-a3b-instruct","choices":[{"index":0,"delta":{"content":","},"logprobs":null,"finish_reason":null,"token_ids":null}],"usage":null}
+
+data: {"id":"chatcmpl-5e38c167-8961-4b11-b326-df6786e6546e","object":"chat.completion.chunk","created":1789217730,"model":"qwen3-coder-30b-a3b-instruct","choices":[{"index":0,"delta":{"content":" two"},"logprobs":null,"finish_reason":null,"token_ids":null}],"usage":null}
+
+data: {"id":"chatcmpl-5e38c167-8961-4b11-b326-df6786e6546e","object":"chat.completion.chunk","created":1789217730,"model":"qwen3-coder-30b-a3b-instruct","choices":[{"index":0,"delta":{"content":","},"logprobs":null,"finish_reason":null,"token_ids":null}],"usage":null}
+
+data: {"id":"chatcmpl-5e38c167-8961-4b11-b326-df6786e6546e","object":"chat.completion.chunk","created":1789217730,"model":"qwen3-coder-30b-a3b-instruct","choices":[{"index":0,"delta":{"content":" three"},"logprobs":null,"finish_reason":null,"token_ids":null}],"usage":null}
+
+data: {"id":"chatcmpl-5e38c167-8961-4b11-b326-df6786e6546e","object":"chat.completion.chunk","created":1789217730,"model":"qwen3-coder-30b-a3b-instruct","choices":[{"index":0,"delta":{"content":"!"},"logprobs":null,"finish_reason":null,"token_ids":null}],"usage":null}
+
+data: {"id":"chatcmpl-5e38c167-8961-4b11-b326-df6786e6546e","object":"chat.completion.chunk","created":1789217730,"model":"qwen3-coder-30b-a3b-instruct","choices":[{"index":0,"delta":{"content":""},"logprobs":null,"finish_reason":"stop","stop_reason":null,"token_ids":null}],"usage":null}
+
+data: {"id":"chatcmpl-5e38c167-8961-4b11-b326-df6786e6546e","object":"chat.completion.chunk","created":1789217730,"model":"qwen3-coder-30b-a3b-instruct","choices":[],"usage":{"prompt_tokens":13,"total_tokens":20,"completion_tokens":7}}
+
+data: [DONE]
+

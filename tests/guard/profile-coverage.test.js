@@ -1,0 +1,101 @@
+// The provider list, example.env, and the captured evidence must agree.
+//
+// Three copies of the same facts otherwise -- a profile file, a line in
+// ProfileRegistry, and a block in example.env -- and nothing would notice them
+// diverging. The symptom of divergence is "it stalls sometimes", which is the
+// most expensive kind of bug to chase.
+
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { REPO, listFiles, scanSource } from './lib/scan.js';
+import { PROFILES, PROFILE_NAMES } from '../../src/provider/ProfileRegistry.js';
+
+const PROFILE_DIR = path.join(REPO, 'src', 'provider', 'profiles');
+const exampleEnv = fs.readFileSync(path.join(REPO, 'example.env'), 'utf8');
+
+test('every file in profiles/ is registered', () => {
+  const files = fs.readdirSync(PROFILE_DIR)
+    .filter((f) => f.endsWith('.js') && f !== 'generic.js')
+    .map((f) => f.replace(/\.js$/, ''));
+  const unregistered = files.filter((f) => !PROFILE_NAMES.includes(f));
+  assert.deepEqual(unregistered, [],
+    `profiles/ contains files no one can reach: ${unregistered.join(', ')}`);
+});
+
+test('every registered profile has a file', () => {
+  const missing = PROFILE_NAMES.filter((n) => !fs.existsSync(path.join(PROFILE_DIR, `${n}.js`)));
+  assert.deepEqual(missing, []);
+});
+
+test('every profile names its settings in example.env', () => {
+  // A provider nobody can configure is a provider nobody will use.
+  const missing = [];
+  for (const p of PROFILES) {
+    for (const v of [p.keyVar, p.baseUrlVar, p.modelVar]) {
+      if (!exampleEnv.includes(v)) missing.push(`${p.name}: ${v}`);
+    }
+  }
+  assert.deepEqual(missing, [], `add these to example.env: ${missing.join(', ')}`);
+});
+
+test('PEASANT_PROVIDERS in example.env lists only known providers', () => {
+  const m = /^PEASANT_PROVIDERS=(.*)$/m.exec(exampleEnv);
+  assert.ok(m, 'example.env must set PEASANT_PROVIDERS');
+  const unknown = m[1].split(',').map((s) => s.trim()).filter(Boolean)
+    .filter((n) => !PROFILE_NAMES.includes(n));
+  assert.deepEqual(unknown, [], `example.env names providers with no profile: ${unknown.join(', ')}`);
+});
+
+test('a profile claiming verified has a captured response behind it', () => {
+  // verified: true is a claim about evidence. Without this, it is a comment.
+  const dirs = fs.readdirSync(path.join(REPO, 'docs', 'raw'), { withFileTypes: true })
+    .filter((e) => e.isDirectory() && e.name.endsWith('_providers'))
+    .map((e) => path.join(REPO, 'docs', 'raw', e.name));
+  const captured = new Set(dirs.flatMap((d) => fs.readdirSync(d))
+    .filter((f) => f.endsWith('.sse'))
+    .map((f) => f.split('-')[0]));
+
+  const unevidenced = PROFILES.filter((p) => p.verified && !captured.has(p.name)).map((p) => p.name);
+  assert.deepEqual(unevidenced, [],
+    `these profiles claim verified with no capture in docs/raw/*_providers/: ${unevidenced.join(', ')}`);
+});
+
+test('an unverified profile says so in a comment', () => {
+  // So nobody trusts a guessed header name because it looked authoritative.
+  const vague = [];
+  for (const p of PROFILES.filter((x) => !x.verified)) {
+    const src = fs.readFileSync(path.join(PROFILE_DIR, `${p.name}.js`), 'utf8');
+    if (!/UNVERIFIED/.test(src)) vague.push(p.name);
+  }
+  assert.deepEqual(vague, [], `these profiles are unverified but do not say so: ${vague.join(', ')}`);
+});
+
+test('no provider is named outside profiles/ and the registry', () => {
+  // The agent loop must not know who it is talking to. A branch on a provider
+  // name is a profile field that has not been written yet.
+  const allowed = [
+    path.join('src', 'provider', 'profiles'),
+    path.join('src', 'provider', 'ProfileRegistry.js'),
+    path.join('bin', 'probe-providers.js'), // the research tool that predates profiles; see TODO.md
+  ];
+  const names = new RegExp(`\\b(${PROFILE_NAMES.join('|')})\\b`, 'i');
+  const offenders = [];
+
+  for (const file of listFiles()) {
+    const rel = path.relative(REPO, file);
+    if (allowed.some((a) => rel.startsWith(a))) continue;
+    // Import specifiers legitimately contain a provider name; statements do not.
+    const { clean } = scanSource(fs.readFileSync(file, 'utf8'));
+    const body = clean.replace(/^\s*(?:import|export)\b[^\n;]*;?$/gm, '');
+    const hit = names.exec(body);
+    if (hit) offenders.push(`${rel}: ${hit[0]}`);
+  }
+  assert.deepEqual(offenders, [],
+    `provider names must not appear outside profiles/: ${offenders.join(', ')}`);
+});
+
+test('the scan found profiles to check', () => {
+  assert.ok(PROFILES.length >= 2, 'no profiles registered -- this guard is blind');
+});

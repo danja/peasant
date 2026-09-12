@@ -14,10 +14,22 @@ Codex — built under two constraints that are the entire point of it:
    POPCNT/LZCNT via ABM, and nothing above. No SSSE3, no SSE4.1/4.2, no AVX. In
    `gcc` terms that is **x86-64-v1**, one level below the `x86-64-v2` baseline that a
    great deal of prebuilt software now assumes.
-2. **It must run on free API tiers.** Groq's free tier is roughly 30 RPM / **6,000 TPM** /
-   14,400 RPD. Six thousand tokens per minute is less than one generous file read.
+2. **It must run on free API tiers.** Measured 2026-09-12 from the accounts we
+   hold: Groq allows **8,000 tokens/minute**, Mistral **625,000**
+   (`docs/providers.md`). Eight thousand is less than one generous file read.
+   Note that every published summary said 6,000 — which is why **no rate limit
+   or context window is ever a constant in this codebase**; they are read from
+   `x-ratelimit-*` response headers, whose names differ per provider.
 
 Neither is a preference to be optimised away later. Both are the specification.
+
+**The CPU constraint is already handled, and the handling is one rule.** Measured
+2026-09-12: every Node major from 18 to 26 passes all fourteen probe checks on
+the target, zlib and AES-GCM included (`docs/runtime-baseline.md`). Node was
+never the problem — Bun was. So **the ban on Bun below is the whole of the CPU
+mitigation**; ordinary code here does not need to think about 2010 silicon. The
+zero-dependency and no-native rules still matter, because they are what stop a
+*future* dependency dragging an `x86-64-v2` binary in behind everyone's back.
 
 **Do not suggest, and do not quietly introduce:**
 
@@ -165,8 +177,8 @@ Three disjoint suites, kept disjoint by `suite-coverage.test.js`:
   that can prove it.
 
 **Mocking the provider is the one deliberate exception** to testing against live services,
-and it is a consequence of the specification: the live service has a 6,000 TPM ceiling
-that a test suite would exhaust in seconds. Everything that is not the provider — the
+and it is a consequence of the specification: the tightest live tier we hold is
+8,000 TPM, a budget a test suite would exhaust in seconds. Everything that is not the provider — the
 filesystem, the shell, the session store — is tested for real.
 
 **Retrieval and budget changes are measured, not asserted.** When `ContextBudget` or

@@ -1,0 +1,6 @@
+data: {"id":"bc81547581fb4027a7350e0ab68fcac3","object":"chat.completion.chunk","created":1789216795,"model":"codestral-latest","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}]}
+
+data: {"id":"bc81547581fb4027a7350e0ab68fcac3","object":"chat.completion.chunk","created":1789216795,"model":"codestral-latest","choices":[{"index":0,"delta":{"tool_calls":[{"id":"NE5cpR50k","type":"function","function":{"name":"get_weather","arguments":"{\"city\": \"Paris\"}"},"index":0}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":108,"total_tokens":120,"completion_tokens":12,"prompt_tokens_details":{"cached_tokens":0},"service_tier":"standard"},"p":"abcdefghijklmn"}
+
+data: [DONE]
+

@@ -1,0 +1,6 @@
+data: {"choices":[{"delta":{"role":"assistant","tool_calls":[{"extra_content":{"google":{"thought_signature":"EsMCCsACARFNMg+J/xCUkg6oZa+PuXpy8xbYMIe5welTzSm/KRHuMKPwRu8mnppauT96o9Guff0/qypSWS5+WZO09XEC9FQmGw+epB4G0vrognyVE0s6GrZY2V8yERAKnFc+sonJIbitREy7Opmles0kA1sdHRnTrXbocrld1ETqmGxYc/PNWpj2CV43F9ktM4UUeIGmEGkxCiVlkOikOZxTCqv3hBIFKov9uDH6sojsnCLwXjjFr7vPCMPbAzwKxCQYPz9CykAKW3as70Oci2qt2dYEd0jee9zkYB9kAHAlefhmxYOIu6r2xaLMAV9UJivQ2v3Q3JiUgTO8DvxqUGGsvpT2L6btasu7IuFNFDd+YhkN2Pgn4COGDVvhBW3mdZsS5nNtvkvIOw4N0EhCj0rHgvS5QaqVO3cgWrBpYdO5g8SUUos="}},"function":{"arguments":"{\"city\":\"Paris\"}","name":"get_weather"},"id":"call_722209","type":"function"}]},"index":0}],"created":1789217742,"id":"zEulaqaVO_PxnsEPm5WesAc","model":"models/gemini-3.8-flash","object":"chat.completion.chunk","usage":{"completion_tokens":16,"prompt_tokens":95,"total_tokens":160}}
+
+data: {"choices":[{"delta":{"role":"assistant"},"finish_reason":"stop","index":0}],"created":1789217742,"id":"zEulaqaVO_PxnsEPm5WesAc","model":"models/gemini-3.8-flash","object":"chat.completion.chunk","usage":{"completion_tokens":16,"prompt_tokens":95,"total_tokens":160}}
+
+data: [DONE]
+

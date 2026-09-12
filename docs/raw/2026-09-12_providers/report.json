@@ -1,0 +1,212 @@
+[
+  {
+    "name": "google",
+    "baseUrl": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "models": {
+      "status": 200,
+      "ms": 225,
+      "count": 55,
+      "ids": [
+        "models/antigravity-preview-05-2026",
+        "models/aqa",
+        "models/deep-research-max-preview-04-2026",
+        "models/deep-research-preview-04-2026",
+        "models/deep-research-pro-preview-12-2025",
+        "models/gemini-2.5-computer-use-preview-10-2025",
+        "models/gemini-2.5-flash",
+        "models/gemini-2.5-flash-image",
+        "models/gemini-2.5-flash-lite",
+        "models/gemini-2.5-flash-native-audio-latest",
+        "models/gemini-2.5-flash-native-audio-preview-09-2025",
+        "models/gemini-2.5-flash-native-audio-preview-12-2025",
+        "models/gemini-2.5-flash-preview-tts",
+        "models/gemini-2.5-pro",
+        "models/gemini-2.5-pro-preview-tts",
+        "models/gemini-3-flash-preview",
+        "models/gemini-3-pro-image",
+        "models/gemini-3-pro-image-preview",
+        "models/gemini-3.1-flash-image",
+        "models/gemini-3.1-flash-image-preview",
+        "models/gemini-3.1-flash-lite",
+        "models/gemini-3.1-flash-lite-image",
+        "models/gemini-3.1-flash-lite-preview",
+        "models/gemini-3.1-flash-live-preview",
+        "models/gemini-3.1-flash-tts-preview",
+        "models/gemini-3.1-pro-preview",
+        "models/gemini-3.1-pro-preview-customtools",
+        "models/gemini-3.5-flash",
+        "models/gemini-3.5-flash-lite",
+        "models/gemini-3.5-live-translate-preview",
+        "models/gemini-3.5-transcribe",
+        "models/gemini-3.5-transcribe-live",
+        "models/gemini-3.6-flash",
+        "models/gemini-3.7-flash",
+        "models/gemini-3.8-flash",
+        "models/gemini-embedding-001",
+        "models/gemini-embedding-2",
+        "models/gemini-embedding-2-preview",
+        "models/gemini-flash-latest",
+        "models/gemini-flash-lite-latest",
+        "models/gemini-omni-1.1-flash",
+        "models/gemini-omni-flash-preview",
+        "models/gemini-pro-latest",
+        "models/gemini-robotics-er-2-preview",
+        "models/gemini-robotics-er-2-streaming-preview",
+        "models/gemma-4-26b-a4b-it",
+        "models/gemma-4-31b-it",
+        "models/lyria-3-clip-preview",
+        "models/lyria-3-pro-preview",
+        "models/lyria-3.5",
+        "models/lyria-realtime-exp",
+        "models/nano-banana-pro-preview",
+        "models/veo-3.1-fast-generate-preview",
+        "models/veo-3.1-generate-preview",
+        "models/veo-3.1-lite-generate-preview"
+      ],
+      "headers": {
+        "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+        "content-encoding": "gzip",
+        "content-type": "application/json; charset=UTF-8",
+        "date": "Sat, 12 Sep 2026 12:55:37 GMT",
+        "server": "scaffolding on HTTPServer2",
+        "server-timing": "gfet4t7; dur=64",
+        "transfer-encoding": "chunked",
+        "vary": "Origin, X-Origin, Referer",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "SAMEORIGIN",
+        "x-xss-protection": "0"
+      },
+      "rateLimit": {},
+      "body": null
+    },
+    "model": "models/gemini-3.8-flash",
+    "nonStreaming": {
+      "status": 200,
+      "ms": 755,
+      "headers": {
+        "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+        "cache-control": "private",
+        "content-encoding": "gzip",
+        "content-type": "application/json",
+        "date": "Sat, 12 Sep 2026 12:55:38 GMT",
+        "expires": "Sat, 12 Sep 2026 12:55:38 GMT",
+        "p3p": "CP=\"This is not a P3P policy! See g.co/p3phelp for more info.\"",
+        "server": "scaffolding on HTTPServer2",
+        "server-timing": "gfet4t7; dur=732",
+        "set-cookie": "[REDACTED]",
+        "transfer-encoding": "chunked",
+        "vary": "Origin, X-Origin, Referer",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "SAMEORIGIN",
+        "x-xss-protection": "0"
+      },
+      "rateLimit": {},
+      "content": null,
+      "usage": {
+        "completion_tokens": 0,
+        "prompt_tokens": 8,
+        "total_tokens": 13
+      },
+      "finishReason": "length",
+      "raw": null
+    },
+    "streaming": {
+      "status": 200,
+      "ms": 2486,
+      "headers": {
+        "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+        "cache-control": "private",
+        "content-encoding": "gzip",
+        "content-type": "text/event-stream",
+        "date": "Sat, 12 Sep 2026 12:55:40 GMT",
+        "expires": "Sat, 12 Sep 2026 12:55:40 GMT",
+        "p3p": "CP=\"This is not a P3P policy! See g.co/p3phelp for more info.\"",
+        "server": "scaffolding on HTTPServer2",
+        "server-timing": "gfet4t7; dur=2465",
+        "set-cookie": "[REDACTED]",
+        "transfer-encoding": "chunked",
+        "vary": "Origin, X-Origin, Referer",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "SAMEORIGIN",
+        "x-xss-protection": "0"
+      },
+      "rateLimit": {},
+      "bytes": 616,
+      "events": 2,
+      "sawDone": true,
+      "includeUsageHonoured": true,
+      "usage": {
+        "completion_tokens": 0,
+        "prompt_tokens": 6,
+        "total_tokens": 27
+      },
+      "text": "",
+      "finishReason": "length",
+      "toolDeltaCount": 0,
+      "firstToolDelta": null,
+      "assembledToolCall": [],
+      "fixture": "docs/raw/2026-09-12_providers/google-stream.sse"
+    },
+    "toolStreaming": {
+      "status": 200,
+      "ms": 1818,
+      "headers": {
+        "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+        "cache-control": "private",
+        "content-encoding": "gzip",
+        "content-type": "text/event-stream",
+        "date": "Sat, 12 Sep 2026 12:55:42 GMT",
+        "expires": "Sat, 12 Sep 2026 12:55:42 GMT",
+        "p3p": "CP=\"This is not a P3P policy! See g.co/p3phelp for more info.\"",
+        "server": "scaffolding on HTTPServer2",
+        "server-timing": "gfet4t7; dur=1797",
+        "set-cookie": "[REDACTED]",
+        "transfer-encoding": "chunked",
+        "vary": "Origin, X-Origin, Referer",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "SAMEORIGIN",
+        "x-xss-protection": "0"
+      },
+      "rateLimit": {},
+      "bytes": 1152,
+      "events": 3,
+      "sawDone": true,
+      "includeUsageHonoured": true,
+      "usage": {
+        "completion_tokens": 16,
+        "prompt_tokens": 95,
+        "total_tokens": 160
+      },
+      "text": "",
+      "finishReason": "stop",
+      "toolDeltaCount": 1,
+      "firstToolDelta": [
+        {
+          "extra_content": {
+            "google": {
+              "thought_signature": "EsMCCsACARFNMg+J/xCUkg6oZa+PuXpy8xbYMIe5welTzSm/KRHuMKPwRu8mnppauT96o9Guff0/qypSWS5+WZO09XEC9FQmGw+epB4G0vrognyVE0s6GrZY2V8yERAKnFc+sonJIbitREy7Opmles0kA1sdHRnTrXbocrld1ETqmGxYc/PNWpj2CV43F9ktM4UUeIGmEGkxCiVlkOikOZxTCqv3hBIFKov9uDH6sojsnCLwXjjFr7vPCMPbAzwKxCQYPz9CykAKW3as70Oci2qt2dYEd0jee9zkYB9kAHAlefhmxYOIu6r2xaLMAV9UJivQ2v3Q3JiUgTO8DvxqUGGsvpT2L6btasu7IuFNFDd+YhkN2Pgn4COGDVvhBW3mdZsS5nNtvkvIOw4N0EhCj0rHgvS5QaqVO3cgWrBpYdO5g8SUUos="
+            }
+          },
+          "function": {
+            "arguments": "{\"city\":\"Paris\"}",
+            "name": "get_weather"
+          },
+          "id": "call_722209",
+          "type": "function"
+        }
+      ],
+      "assembledToolCall": [
+        {
+          "id": "call_722209",
+          "name": "get_weather",
+          "args": "{\"city\":\"Paris\"}",
+          "argsValid": true,
+          "argsParsed": {
+            "city": "Paris"
+          }
+        }
+      ],
+      "fixture": "docs/raw/2026-09-12_providers/google-tools.sse"
+    }
+  }
+]

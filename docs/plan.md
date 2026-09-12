@@ -8,20 +8,21 @@ project exists". The measured runtime floor is `docs/runtime-baseline.md`.
 
 ## Phase R — Research
 
-**R1. Runtime baseline — blocks everything else.** Establish which Node builds
-run on the target CPU. `bin/probe-runtime.js` and `bin/probe-node-matrix.sh`
-exist for this. Record in `docs/runtime-baseline.md` and flip its
-`baseline:status` marker from `PENDING` to `MEASURED`.
-**Status: tooling shipped, measurement outstanding — needs the target machine.**
+**R1. Runtime baseline — complete.** Every Node major from 18 to 26 passes all
+fourteen probe checks on the target. The floor is **>=22.0.0**, set by Node's
+own support schedule rather than by what survives, since everything survives.
+`docs/runtime-baseline.md` carries the measurement and the reasoning.
+**Status: done, 2026-09-12.**
 
-**R2. Free-tier landscape.** `bin/probe-providers.js` calls each provider with a
-key present and dumps every response header, so the rate-limit header names,
-tool-calling fidelity, streaming tool-call shape, `stream_options.include_usage`
-support and 429 body are recorded rather than assumed.
+**R2. Free-tier landscape — done** for Groq, Mistral, Cerebras and OpenRouter.
+`bin/probe-providers.js` reads the provider list from `ProfileRegistry` and
+dumps every response header and the raw SSE bytes. Findings in
+`docs/providers.md`. The 429 body has now been observed too.
 
-**R3. Tool-calling dialects.** The OpenAI shape is a family, not a standard.
-Catalogue the differences with a fixture per case; each becomes a field in a
-provider profile, never a branch in the loop.
+**R3. Tool-calling dialects — done** for the keyed providers. Both shapes are
+captured: whole-in-one-delta (Groq, Mistral) and incremental (OpenRouter). A
+guard test asserts both remain represented, so half the assembler cannot become
+untested.
 
 **R4. Prior art.** OpenCode, Codex CLI, and Claude Code's pre-Bun npm package
 (plain readable JS). Context compaction, permission prompts, and file editing
@@ -50,15 +51,26 @@ guard so they cost nothing:
 - `gitignore` — the stock `*.log` rule cannot swallow a recorded stream fixture
 - `scanner` — the scraper the guards rely on still scrapes
 
-## Phase 1 — Provider core
+## Phase 1 — Provider core — **complete**
 
-`SseParser`, `OpenAICompatClient`, `ToolCallAssembler`, `ProfileRegistry` with
-profiles for Groq and Mistral, `RateLimiter`, `Router`, and the local fake
-OpenAI-compatible server used by every later suite.
+`SseParser`, `OpenAICompatClient`, `ToolCallAssembler`, `RateLimiter`, `Router`,
+`ProfileRegistry` with five profiles, `connect`, `Env`, `Terminal`/`Ansi`, and
+the local fake OpenAI-compatible server the later suites need.
 
-**Deliverable:** `peasant ask "..."` streams a completion from a free tier,
-respects the rate limit it read from the response headers, and fails over to the
-next configured provider on 429.
+**Deliverable, verified live:** `peasant ask "..."` streams from a free tier,
+reports provider, model and token usage including reasoning tokens, and rotates
+past a provider that will not serve. `PEASANT_PROVIDERS=cerebras,groq peasant
+ask ...` was answered by Groq after Cerebras returned 402, with the reason shown
+rather than swallowed.
+
+Also `peasant providers`, `peasant models`, `peasant doctor`.
+
+**R2 and R3 closed alongside it** for the four keyed providers — see
+`docs/providers.md`. The findings shaped the code rather than following it:
+both tool-call dialects are represented in the captures, three of four providers
+publish no rate-limit headers at all, and a live 402 exposed two bugs (a zero
+limit read as impossible-forever, and a provider's billing failure classified as
+a bad request, which would have taken the whole session down).
 
 ## Phase 2 — Agent loop and tools
 
@@ -80,7 +92,7 @@ input, and a Ctrl-C that cancels the in-flight request rather than the process.
 `TokenEstimator` calibrated against real `usage`, `ContextBudget`, `Compactor`,
 tool-result truncation, `session/Store` with resume and fork.
 
-**Deliverable:** a long session that survives a 6,000 TPM budget, with tokens
+**Deliverable:** a long session that survives an 8,000 TPM budget, with tokens
 used, turns and wall time recorded in `docs/entries/` — measured, not asserted.
 
 ## Phase 5 — Extensibility

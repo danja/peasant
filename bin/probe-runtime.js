@@ -179,11 +179,16 @@ const CHECKS = {
 
   tls: {
     // The real end-to-end check: undici + llhttp + OpenSSL against a live host.
+    //
+    // Deliberately not an LLM provider: this probe answers "does this Node
+    // build work", and an answer that changes when someone else has an outage
+    // is not an answer. nodejs.org is what probe-node-matrix.sh already needs.
+    // (Captures from before 2026-09-12 show `HTTP 401` here, from when this
+    // pointed at a provider endpoint.)
     what: 'HTTPS fetch (undici + TLS)',
     native: true,
     run: async () => {
-      const r = await fetch('https://api.groq.com/openai/v1/models', {
-        headers: { authorization: 'Bearer probe' },
+      const r = await fetch('https://nodejs.org/dist/index.json', {
         signal: AbortSignal.timeout(20000),
       });
       await r.text();

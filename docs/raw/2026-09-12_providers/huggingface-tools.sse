@@ -1,0 +1,18 @@
+data: {"id":"chatcmpl-37f6b0e1-5dc6-498c-8144-9fd05f0d38af","object":"chat.completion.chunk","created":1789217731,"model":"qwen3-coder-30b-a3b-instruct","choices":[{"index":0,"delta":{"role":"assistant","content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-37f6b0e1-5dc6-498c-8144-9fd05f0d38af","object":"chat.completion.chunk","created":1789217731,"model":"qwen3-coder-30b-a3b-instruct","choices":[{"index":0,"delta":{"tool_calls":[{"id":"call_bf41798e352d4071a12de2e8","type":"function","index":0,"function":{"name":"get_weather","arguments":""}}]},"logprobs":null,"finish_reason":null,"token_ids":null}],"usage":null}
+
+data: {"id":"chatcmpl-37f6b0e1-5dc6-498c-8144-9fd05f0d38af","object":"chat.completion.chunk","created":1789217731,"model":"qwen3-coder-30b-a3b-instruct","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{"}}]},"logprobs":null,"finish_reason":null,"token_ids":null}],"usage":null}
+
+data: {"id":"chatcmpl-37f6b0e1-5dc6-498c-8144-9fd05f0d38af","object":"chat.completion.chunk","created":1789217731,"model":"qwen3-coder-30b-a3b-instruct","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"city\": \"Paris\""}}]},"logprobs":null,"finish_reason":null,"token_ids":null}],"usage":null}
+
+data: {"id":"chatcmpl-37f6b0e1-5dc6-498c-8144-9fd05f0d38af","object":"chat.completion.chunk","created":1789217731,"model":"qwen3-coder-30b-a3b-instruct","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":", \"unit\": \"c\""}}]},"logprobs":null,"finish_reason":null,"token_ids":null}],"usage":null}
+
+data: {"id":"chatcmpl-37f6b0e1-5dc6-498c-8144-9fd05f0d38af","object":"chat.completion.chunk","created":1789217731,"model":"qwen3-coder-30b-a3b-instruct","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"}"}}]},"logprobs":null,"finish_reason":null,"token_ids":null}],"usage":null}
+
+data: {"id":"chatcmpl-37f6b0e1-5dc6-498c-8144-9fd05f0d38af","object":"chat.completion.chunk","created":1789217731,"model":"qwen3-coder-30b-a3b-instruct","choices":[{"index":0,"delta":{"content":""},"logprobs":null,"finish_reason":"tool_calls","stop_reason":null,"token_ids":null}],"usage":null}
+
+data: {"id":"chatcmpl-37f6b0e1-5dc6-498c-8144-9fd05f0d38af","object":"chat.completion.chunk","created":1789217731,"model":"qwen3-coder-30b-a3b-instruct","choices":[],"usage":{"prompt_tokens":334,"total_tokens":366,"completion_tokens":32}}
+
+data: [DONE]
+

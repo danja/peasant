@@ -5,26 +5,19 @@ Kept current at the end of any session that changes it.
 
 ## Blocking the project
 
-1. **Run the full probe on the target machine.** This is the one thing standing
-   between the plan and Phase 1.
-
-   ```sh
-   cd /path/to/peasant && git pull      # or copy bin/probe-runtime.js across
-   node bin/probe-runtime.js
-   ```
-
-   It takes well under a minute. Each check runs in its own process, so if
-   something dies the output names which check and whether a V8 flag rescues it.
-   Paste the output back.
-
-   If you would rather also test other Node majors:
-   `./bin/probe-node-matrix.sh` — downloads official builds for 18/20/22/24/26
-   into `/tmp` and probes each. Only worth it if v26 fails something.
-
-2. **Which free-tier API keys do you already have?** Groq and Mistral are the
+1. **Which free-tier API keys do you already have?** Groq and Mistral are the
    two named in the brief. Cerebras, OpenRouter and Google AI Studio are all
    OpenAI-compatible and cost nothing, so they widen the failover pool for free.
-   Keys go in `.env`, which is gitignored; do not paste them into chat.
+   `cp example.env .env` and fill in whatever you have — that file lists all
+   eight known free providers with a signup link for each, and every base URL in
+   it was probed on 2026-09-12 rather than recalled. Do not paste keys into chat,
+   and fill in `.env`, not `example.env` (a guard test fails if a key lands in
+   the committed one).
+
+   This is now the only thing gating Phase 1 finishing — I can build and test
+   the provider core against the local fake server without any key, but R2
+   (recording each provider's real rate-limit headers and tool-call dialect)
+   needs one key per provider.
 
 ## Decisions I need from you, not urgently
 
@@ -40,12 +33,32 @@ Kept current at the end of any session that changes it.
 
 ## Things I have asserted but not verified
 
-- That Node v26.8.1 **works** on the target. What is actually measured is that
-  it *starts*. Item 1 is what turns one into the other.
-- Every free-tier rate limit quoted in `CLAUDE.md` and `docs/plan.md` comes from
-  published documentation, not from a response header this project has seen.
-  Item 2 and `bin/probe-providers.js` are what fix that.
+- That a session is *usable* on this hardware — the probe proves Node runs, not
+  that a streaming TUI feels acceptable at 3.0 GHz K10. Phase 3 finds out.
 
 ## Confirmed done
 
-- *(nothing yet)*
+- **Added Google AI Studio and Hugging Face keys** (2026-09-12). Both work and
+  are now verified profiles; six providers are configured. Both needed their
+  model preferences rewritten first — Google's listed model was retired for new
+  users, and the Hugging Face model chosen refused `tools` outright. Neither was
+  a transport problem, and in both cases the code refused rather than guessing,
+  which made each a one-line fix.
+- **Added Cerebras and OpenRouter keys** (2026-09-12). OpenRouter works and is
+  now a verified profile — and it turned out to be the one provider that streams
+  tool calls *incrementally* rather than whole, which means the assembler's
+  harder path is now tested against real bytes instead of an invented fixture.
+  Cerebras is item 1 above.
+- **Supplied Groq and Mistral keys** (2026-09-12), which unblocked R2. Worth
+  knowing what they bought: the published free-tier figures were wrong in both
+  directions. Groq is 8,000 tokens/minute, not the 6,000 every write-up quotes;
+  Mistral is 625,000, where the same write-ups said only "roughly 1 req/s". See
+  `docs/providers.md`. Nothing in the code was ever going to depend on those
+  numbers — they are read from response headers at runtime — but the plan's
+  ordering did, and it changed.
+- **Ran the runtime probes on the target** (2026-09-12). This was the gate on
+  everything, and the answer was better than the best case anticipated: **every
+  Node major from 18 to 26 passes all fourteen checks.** Node was never the
+  problem — Bun was. The floor is now `>=22.0.0`, chosen by Node's support
+  schedule rather than by what survives. Results in
+  `docs/runtime-baseline.md`, raw output in `docs/raw/2026-09-12_probe/`.

@@ -1,7 +1,7 @@
 # The target machine
 
-Measured 2026-09-12 by the Stage A probe. Raw output preserved at
-`raw/2026-09-12_stage-a.txt`; nothing here is from memory.
+Measured 2026-09-12. Raw output preserved at `raw/2026-09-12_stage-a.txt` and
+`raw/2026-09-12_probe/`; nothing here is from memory.
 
 | | |
 |---|---|
@@ -11,7 +11,7 @@ Measured 2026-09-12 by the Stage A probe. Raw output preserved at
 | RAM | 14,970 MB |
 | OS | Ubuntu 26.04 LTS, kernel 7.0.0-31-generic, x86_64 |
 | glibc | 2.43 |
-| Node | **v26.8.1** — present, and `node --version` exits 0 |
+| Node | **v26.8.1** — present; passes all 14 probe checks |
 | npm | 11.19.0 |
 | Toolchain | gcc/g++ 15.2.0, make 4.4.1, git 2.53.0, python3 3.14.4 |
 | ripgrep | 15.1.0 — present, exits 0 |
@@ -35,16 +35,17 @@ us nothing and should not appear in any build flag.
 
 ## What this already rules in and out
 
-- **Node 26 starts.** That is a genuinely good result — far better than the
-  worst case in `runtime-baseline.md`, which anticipated having to build from
-  source. It is *not yet* a verdict: `node --version` exercises none of the JIT,
-  zlib, OpenSSL or WebAssembly paths that the reported SIGILLs came from. The
-  full probe is still the gate.
+- **Node works here — every major from 18 to 26, all 14 checks.** Measured, not
+  assumed; see [`runtime-baseline.md`](runtime-baseline.md). The fear was zlib
+  ([nodejs/node#32625](https://github.com/nodejs/node/issues/32625)) and it does
+  not reproduce. AES-256-GCM passes on a CPU with neither `aes` nor `pclmulqdq`,
+  which means OpenSSL's runtime dispatch is honest rather than compiled to
+  assume AES-NI. **The ban on Bun is the whole of the CPU mitigation**; no other
+  part of the codebase has to bend for this processor.
 - **Memory is not a constraint.** 15 GB, 11 GB available. Nothing in this design
   needs to be frugal with RAM; it needs to be frugal with *tokens*.
-- **A full build toolchain is present.** gcc 15.2 and make mean building Node
-  from source on this machine is available as a fallback if the probe finds a
-  fatal native path.
+- **A full build toolchain is present.** gcc 15.2 and make. No longer needed as
+  a fallback — the probe found no fatal native path — but useful to have.
 - **ripgrep 15.1.0 runs.** Rust binaries built for baseline x86-64 are fine
   here. Peasant will not *ship* a binary — that is banned — but the `grep` tool
   may prefer a system `rg` when one is on PATH and fall back to pure JS
@@ -53,5 +54,6 @@ us nothing and should not appear in any build flag.
 
 ## Still outstanding
 
-`node bin/probe-runtime.js` has not been run here. Until it has, the claim
-"Node 26 works on this machine" means only that the binary loads.
+Nothing about the runtime. The open questions here are the terminal capability
+survey (R5 — `TERM`, colour depth, unicode width, raw mode) and whether `grep`
+should use the system `rg`; both are in [`danja-todo.md`](danja-todo.md).
