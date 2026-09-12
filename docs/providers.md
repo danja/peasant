@@ -213,6 +213,36 @@ Rotation happens only **before the first token**. Once a stream has emitted
 text the user has seen it, and restarting elsewhere would duplicate or
 contradict what is on screen.
 
+## Local models
+
+`ollama` and `llamacpp` profiles exist and need no key, no quota and no network.
+Neither is tried unless named in `PEASANT_PROVIDERS`: probing a port nobody is
+listening on costs a connection refusal on every start, for a provider most
+people do not run.
+
+Verified 2026-09-12 on the development machine:
+
+```
+$ PEASANT_PROVIDERS=ollama peasant ask "Reply with exactly: ok"
+  ollama
+ok
+  qwen2.5:0.5b · 34 in · 2 out
+```
+
+Two rules bend for them, both deliberately and both enforced:
+
+- **Plaintext is allowed**, but only for a loopback address — the key never
+  leaves the machine. `OpenAICompatClient` refuses `http://` to anything else,
+  and a profile with a loopback base URL must declare `requiresKey: false` or
+  `defineProfile` throws.
+- **A catch-all model preference is reasonable here** where it would be reckless
+  on a hosted provider. The local catalogue is small and the user's own, so the
+  worst case is their single model rather than an Arabic text-to-speech model
+  chosen alphabetically.
+
+They will be slow on an Athlon II. That is a trade made knowingly, and it is the
+only option that works with no network at all.
+
 ## Open questions
 
 - Which model to default to per provider. `mistral-vibe-cli-with-tools` and

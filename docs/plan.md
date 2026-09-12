@@ -72,13 +72,22 @@ publish no rate-limit headers at all, and a live 402 exposed two bugs (a zero
 limit read as impossible-forever, and a provider's billing failure classified as
 a bad request, which would have taken the whole session down).
 
-## Phase 2 — Agent loop and tools
+## Phase 2 — Agent loop and tools — **complete**
 
-`Loop`, `Conversation`, the `Tool` interface and registry, the file and shell
-tools, `Policy` and the approval prompt.
+`Loop`, `Conversation`, `Tool` + `schema` + `registry`, seven tools (`read`,
+`write`, `edit`, `ls`, `glob`, `grep`, `bash`), workspace confinement in
+`paths.js`, `Policy` and `Prompt`, and a terse system prompt.
 
-**Deliverable:** `peasant run "<task>"` non-interactively reads, edits and runs
-commands to completion.
+**Deliverable, verified live:** `peasant run "<task>"` reads, edits, writes and
+runs commands to completion. Two real tasks in a scratch workspace:
+
+- adding a function to an existing file without disturbing it — 5 turns;
+- writing a `node:test` file and running it — 8 turns, **rotating from Groq to
+  OpenRouter mid-task** when Groq's 8,000 TPM ran out, with Cerebras retired on
+  its 402. The test it wrote passes when run independently.
+
+The second run is the one worth noting: the task completed across two providers
+without the user doing anything, which is the entire argument for the router.
 
 ## Phase 3 — Terminal UI
 
@@ -86,6 +95,24 @@ commands to completion.
 
 **Deliverable:** the interactive session — streamed output, history, multiline
 input, and a Ctrl-C that cancels the in-flight request rather than the process.
+
+### What Phase 2 exposed
+
+- **Config was read only from the working directory**, which is the *workspace* —
+  somebody else's project. Keys belong with peasant. `Env.configFiles()` now
+  searches `~/.config/peasant/.env`, `~/.peasant/.env` and `./.env` in
+  increasing precedence, and `peasant doctor` says which were found.
+- **A `bash` timeout did not actually kill anything.** Killing the shell left
+  its children holding the pipes, and `close` waits for stdio EOF, so `sleep 30`
+  with a one-second timeout took the full thirty. Commands now run in their own
+  process group. The test suite went from 30 seconds to 2.
+- **An empty string is a model saying "default".** `glob {"path":""}` cost a
+  turn and a minute of budget on "path must be a non-empty string". Empty now
+  means the default where one is declared, and is kept where none is — `edit.new`
+  of `""` means delete.
+- **Turn cost is dominated by resending everything.** 14,000 input tokens over 8
+  turns, against Groq's 8,000/minute. The system prompt and seven tool schemas
+  go out on every turn. This is what Phase 4 is for.
 
 ## Phase 4 — Context economy
 
@@ -97,7 +124,7 @@ used, turns and wall time recorded in `docs/entries/` — measured, not asserted
 
 ## Phase 5 — Extensibility
 
-MCP stdio client, custom slash commands, project-level `PEASANT.md` context
+MCP stdio and HTTP clients, custom slash commands, project-level `PEASANT.md` context
 files, the remaining provider profiles.
 
 ## Phase 6 — Packaging

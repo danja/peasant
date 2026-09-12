@@ -5,9 +5,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertRunnable } from '../src/compat/Preflight.js';
-import { load } from '../src/config/Env.js';
+import { load, configFiles, sourceOf } from '../src/config/Env.js';
 import { connect } from '../src/provider/connect.js';
 import { Terminal } from '../src/ui/Terminal.js';
+import { Loop } from '../src/agent/Loop.js';
+import { Conversation } from '../src/agent/Conversation.js';
+import { systemPrompt } from '../src/agent/prompt.js';
+import { Policy } from '../src/permission/Policy.js';
+import { Prompt, describe as describeCall } from '../src/permission/Prompt.js';
+import { TOOLS } from '../src/tools/registry.js';
+import { PROFILES } from '../src/provider/ProfileRegistry.js';
+import { workspaceRoot } from '../src/tools/paths.js';
+import { engineName } from '../src/tools/search/index.js';
 
 const PKG = JSON.parse(fs.readFileSync(
   path.resolve(fileURLToPath(import.meta.url), '../../package.json'), 'utf8',
@@ -15,11 +24,13 @@ const PKG = JSON.parse(fs.readFileSync(
 
 const USAGE = `peasant ${PKG.version} -- ${PKG.description}
 
-  peasant ask <prompt>     ask a question, streamed
+  peasant ask <prompt>     ask a question, streamed -- no tools, no file access
+  peasant run <task>       work on a task, using the tools
   peasant providers        show which providers are configured and what budget they report
   peasant models           list the chat models each provider offers
   peasant doctor           check the runtime and the configuration
 
+  --allow-all              run tools without asking (implies PEASANT_PERMISSION_MODE=allow)
   --version                print the version
   --help                   this
 
@@ -27,8 +38,10 @@ Providers are tried in PEASANT_PROVIDERS order, and peasant moves on to the next
 one when the current is rate limited, unavailable or failing. Set
 PEASANT_ROTATE=off to pin every request to the first provider instead.
 
-Configuration is .env in the working directory, or the environment.
-See example.env for every setting and every supported provider.`;
+Configuration is read from ~/.config/peasant/.env, then ./.env, then the
+environment — later wins. Keys belong in the user-level file; the working
+directory is the workspace peasant is working ON. Run "peasant doctor" to see
+which files were found. See example.env for every setting and every provider.`;
 
 async function main(argv) {
   const term = new Terminal();
@@ -43,6 +56,9 @@ async function main(argv) {
 
   switch (command) {
     case 'ask': return ask(term, env, rest.join(' '));
+    case 'run': return runTask(term, env, rest.filter((a) => !a.startsWith('--')).join(' '), {
+      allowAll: argv.includes('--allow-all'),
+    });
     case 'providers': return providers(term, env);
     case 'models': return models(term, env);
     case 'doctor': return doctor(term, env);
@@ -121,6 +137,99 @@ function report(term, result) {
   term.line(term.paint(`  ${result.model ?? result.provider} · ${bits.join(' · ')}`, 'grey'));
 }
 
+async function runTask(term, env, task, { allowAll }) {
+  if (task.trim() === '') { term.error('nothing to do. Try: peasant run "add a --version flag"'); return 64; }
+
+  const controller = new AbortController();
+  const onSigint = () => controller.abort();
+  process.on('SIGINT', onSigint);
+
+  try {
+    const root = workspaceRoot();
+    const { router, failed } = await connect(env, {
+      signal: controller.signal,
+      onProgress: (m) => term.status(term.paint(`  ${m}...`, 'grey')),
+    });
+    term.clearStatus();
+    for (const f of failed) term.error(term.paint(`  ${f.name} unavailable: ${f.error}`, 'yellow'));
+
+    const policy = new Policy({ mode: allowAll ? 'allow' : (env.PEASANT_PERMISSION_MODE ?? 'ask') });
+    const prompt = new Prompt({ terminal: term });
+
+    if (policy.mode === 'ask' && !prompt.interactive) {
+      term.error(term.paint(
+        'no terminal attached, so peasant cannot ask before changing anything.\n'
+        + 'Re-run with --allow-all if that is what you intend.', 'red'));
+      return 64;
+    }
+
+    const loop = new Loop({ router, tools: TOOLS, policy, prompt, root });
+    const conversation = new Conversation({ system: systemPrompt({ root }) }).user(task);
+
+    let totalIn = 0;
+    let totalOut = 0;
+    let sawReasoning = false;
+    let lastProvider = null;
+
+    for await (const ev of loop.run(conversation, { signal: controller.signal })) {
+      switch (ev.type) {
+        case 'provider':
+          // Only when it changes. Repeating the same name on every turn is
+          // noise that hides the one case it exists for: a rotation.
+          if (ev.name !== lastProvider) {
+            lastProvider = ev.name;
+            term.endLine();
+            term.line(term.paint(`  ${ev.name}`, 'grey'));
+          }
+          break;
+        case 'reasoning':
+          if (!sawReasoning) { sawReasoning = true; term.status(term.paint('  thinking...', 'grey')); }
+          break;
+        case 'text':
+          if (sawReasoning) { term.clearStatus(); sawReasoning = false; }
+          term.write(ev.delta);
+          break;
+        case 'usage':
+          totalIn += ev.usage.prompt_tokens ?? 0;
+          totalOut += ev.usage.completion_tokens ?? 0;
+          break;
+        case 'tool-start':
+          term.clearStatus();
+          term.endLine();
+          term.line(term.paint(`  ${ev.name}  ${describeCall({ name: ev.name }, ev.args)[0] ?? ''}`, 'cyan'));
+          break;
+        case 'tool-result':
+          term.line(term.paint(`    ${firstLineOf(ev.content)}`, ev.ok ? 'grey' : 'yellow'));
+          break;
+        case 'done':
+          term.clearStatus();
+          term.endLine();
+          term.line(term.paint(
+            `  ${ev.reason} in ${ev.turns} turn${ev.turns === 1 ? '' : 's'} · ${totalIn} in · ${totalOut} out`,
+            'grey'));
+          for (const [name, why] of router.retired) {
+            term.error(term.paint(`  ${name} withdrawn for this session: ${why}`, 'yellow'));
+          }
+          break;
+        default: break;
+      }
+    }
+    return 0;
+  } catch (e) {
+    if (e?.name === 'AbortError') { term.endLine(); term.error(term.paint('interrupted', 'grey')); return 130; }
+    term.endLine();
+    term.error(term.paint(e.message, 'red'));
+    return 70;
+  } finally {
+    process.off('SIGINT', onSigint);
+  }
+}
+
+function firstLineOf(text) {
+  const line = String(text).split('\n')[0];
+  return line.length > 100 ? `${line.slice(0, 100)}...` : line;
+}
+
 async function providers(term, env) {
   const { clients, skipped, failed, prefs } = await connect(env, {
     onProgress: (m) => term.status(term.paint(`  ${m}...`, 'grey')),
@@ -161,7 +270,33 @@ async function models(term, env) {
 async function doctor(term, env) {
   term.line(term.paint('runtime', 'bold'));
   term.line(`  node ${process.version}, required ${PKG.engines.node}`);
-  term.line(`  run \`node bin/probe-runtime.js\` for the full check`);
+  term.line('  run `node bin/probe-runtime.js` for the full check');
+  term.line('');
+
+  term.line(term.paint('search', 'bold'));
+  const engine = engineName();
+  term.line(term.paint(
+    engine === 'javascript'
+      ? '  javascript (no ripgrep on PATH; install it for faster grep on large trees)'
+      : `  ${engine} (found on PATH; peasant never bundles a binary)`,
+    'grey'));
+  term.line('');
+
+  term.line(term.paint('configuration', 'bold'));
+  for (const file of configFiles()) {
+    const exists = fs.existsSync(file);
+    term.line(term.paint(`  ${exists ? 'found  ' : 'absent '} ${file}`, exists ? 'grey' : 'grey'));
+  }
+  // Only the keys peasant itself reads. The environment is full of other
+  // tools' tokens, and listing them is noise at best and alarming at worst.
+  const keyVars = PROFILES.map((p) => p.keyVar).filter((k) => (env[k] ?? '') !== '');
+  if (keyVars.length === 0) {
+    term.line(term.paint('  no keys found — copy example.env to ~/.config/peasant/.env', 'yellow'));
+  } else {
+    for (const k of keyVars.sort()) {
+      term.line(term.paint(`  ${k.padEnd(20)} from ${sourceOf(env, k) ?? 'unknown'}`, 'grey'));
+    }
+  }
   term.line('');
   return providers(term, env);
 }

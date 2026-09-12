@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { defineProfile, NON_CHAT } from '../../src/provider/profiles/generic.js';
-import { PROFILES, byName, configure, resolveOrder, selectModel } from '../../src/provider/ProfileRegistry.js';
+import { PROFILES, DEFAULT_ORDER, byName, configure, resolveOrder, selectModel } from '../../src/provider/ProfileRegistry.js';
 import groq from '../../src/provider/profiles/groq.js';
 import mistral from '../../src/provider/profiles/mistral.js';
 
@@ -118,8 +118,42 @@ test('configure lets env override the base URL and model', () => {
   assert.equal(c.model, 'm');
 });
 
-test('resolveOrder defaults to every profile when PEASANT_PROVIDERS is unset', () => {
-  assert.deepEqual(resolveOrder({}).map((c) => c.name), PROFILES.map((p) => p.name));
+test('resolveOrder defaults to the hosted providers, not the local ones', () => {
+  // Probing a port nobody is listening on costs a connection refusal on every
+  // start, for a provider most people do not run. Naming one turns it on.
+  assert.deepEqual(resolveOrder({}).map((c) => c.name), DEFAULT_ORDER);
+  assert.ok(!DEFAULT_ORDER.includes('ollama'));
+  assert.ok(PROFILES.some((p) => p.name === 'ollama'), 'but it still exists');
+});
+
+test('a local provider is usable without a key', () => {
+  // It has no account. An empty key is not a reason to skip it.
+  const [ollama] = resolveOrder({ PEASANT_PROVIDERS: 'ollama' });
+  assert.equal(ollama.usable, true);
+  assert.equal(ollama.key, '');
+  assert.equal(ollama.baseUrl, 'http://127.0.0.1:11434/v1');
+});
+
+test('a hosted provider is still unusable without a key', () => {
+  assert.equal(configure(byName('groq'), {}).usable, false);
+});
+
+test('plaintext is allowed for loopback and refused for anything else', () => {
+  // The key never leaves the machine, so a local server needs no TLS. A remote
+  // one over http would put it on the wire.
+  assert.doesNotThrow(() => defineProfile({
+    ...minimal, baseUrl: 'http://127.0.0.1:1234/v1', requiresKey: false,
+  }));
+  assert.throws(() => defineProfile({
+    ...minimal, baseUrl: 'http://example.com/v1', requiresKey: false,
+  }), /must be https unless it is loopback/);
+});
+
+test('a plaintext loopback provider must declare that it needs no key', () => {
+  // Otherwise a key would be configured for a connection with no TLS, and
+  // nothing would say so.
+  assert.throws(() => defineProfile({ ...minimal, baseUrl: 'http://127.0.0.1:1234/v1' }),
+    /must set requiresKey: false/);
 });
 
 test('resolveOrder respects the configured order', () => {

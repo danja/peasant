@@ -44,6 +44,10 @@ zero-dependency and no-native rules still matter, because they are what stop a
   slowest possible hardware.
 - **`tiktoken` or any tokeniser package.** WASM blob plus BPE tables — banned twice over.
 - **Any runtime dependency at all.** See below.
+- **Bundling a binary — ripgrep included.** peasant *uses* a `rg` already on the
+  PATH, because that one was built for the machine it is on. It must never ship
+  one, and `tests/guard/no-native.test.js` enforces that by magic number as well
+  as by extension.
 
 ## Layout
 
@@ -57,7 +61,9 @@ zero-dependency and no-native rules still matter, because they are what stop a
   provider)
 - `src/agent/` — `Loop.js`, `Conversation.js`, `ContextBudget.js`, `Compactor.js`,
   `TokenEstimator.js`
-- `src/tools/` — `Tool.js` (the interface), `registry.js` (the one list), one file per tool
+- `src/tools/` — `Tool.js` (the interface), `schema.js` (the JSON Schema subset),
+  `registry.js` (the one list), `paths.js` (workspace confinement), one file per
+  tool, and `search/` — two interchangeable grep engines behind one door
 - `src/permission/` — `Policy.js`, `Prompt.js`
 - `src/session/` — `Store.js` (JSONL under `~/.peasant/sessions`)
 - `src/ui/` — `Terminal.js` (the only module that writes to stdout), `Ansi.js`, `Repl.js`,
@@ -83,10 +89,19 @@ being broken — and if the answer is "a careful reader", write the check instea
 | No `install`/`postinstall` script, no `binding.gyp` | same |
 | `engines.node` matches the measured floor | `tests/guard/engines.test.js` |
 | Every `tests/` directory is run by some npm script, and the suites are disjoint | `tests/guard/suite-coverage.test.js` |
-| No provider-specific branching outside `src/provider/profiles/` | *(Phase 1)* `tests/guard/profile-coverage.test.js` |
-| Never hardcode a rate limit or a context window | *(Phase 1)* grep guard |
-| All stdout goes through `src/ui/Terminal.js` | *(Phase 3)* `tests/guard/no-raw-stdout.test.js` |
-| A tool's advertised schema is the schema that validates | *(Phase 2)* `tests/guard/tool-schema.test.js` |
+| No provider-specific branching outside `src/provider/profiles/` | `tests/guard/profile-coverage.test.js` |
+| Every tunable lives in `src/config/preferences.js` and is documented in `example.env` | `tests/guard/example-env.test.js` |
+| All terminal output goes through `src/ui/Terminal.js` | `tests/guard/no-raw-stdout.test.js` |
+| A tool's advertised schema is the schema that validates | `tests/guard/tool-schema.test.js` |
+| The two search engines give byte-identical answers | `tests/unit/search-parity.test.js` |
+| Every tool declares `mutates`; the permission policy reads nothing else | same |
+| No tool reads or writes outside the workspace | `tests/unit/tools.test.js` |
+
+**Never hardcode a rate limit or a context window.** There is no guard for this
+and there does not need to be: `RateLimiter` holds no limit values at all,
+profiles hold only header *names*, and `src/config/preferences.js` is the only
+home for a tunable. The structure leaves a hardcoded limit nowhere to live,
+which is stronger than a grep that would notice one.
 
 **A guard that scrapes source needs its own test that the scraping still works**, or it
 goes blind rather than red. `tests/guard/scanner.test.js` is that test for
@@ -155,6 +170,26 @@ reason to change, and a long one rarely does.
   provider's quirks — not by line count.
 - The test suites are the safety net, so a refactor that needs its tests rewritten to pass
   is not a refactor. Move code, keep behaviour, and the existing tests should still hold.
+
+## Two implementations of one thing need a test that compares them
+
+`src/tools/search/` has two engines: ripgrep when the machine has one, pure
+JavaScript otherwise. A query must give the same answer either way, or the same
+question gives two people different results depending on what they happen to
+have installed — the worst kind of bug, because it works on your machine and the
+difference is invisible.
+
+`tests/unit/search-parity.test.js` runs **both** engines over one deliberately
+awkward tree and compares. It has already earned its place twice:
+
+- ripgrep's `-g '**/.github/**'` found *nothing at all*, because in ripgrep any
+  positive glob is a whitelist.
+- An `include` glob silently re-enabled `node_modules` and `dist`, because the
+  *last* matching glob wins — so a `grep --include '**/*.js'` would have searched
+  a dependency tree and spent a minute of token budget in one call.
+
+Neither was visible from either engine alone. When a second implementation of
+anything appears here, the test that compares them is not optional.
 
 ## Where a list must exist, make it one list and export it
 

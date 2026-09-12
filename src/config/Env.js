@@ -12,6 +12,8 @@
 //     account, and costs an hour to tell apart.
 
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 const LINE = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/;
 
@@ -78,16 +80,57 @@ export function read(file = '.env') {
   return parse(fs.readFileSync(file, 'utf8'), file);
 }
 
-// Merges file values under the real environment, which always wins. Returns a
-// plain object rather than mutating process.env, so a caller can see exactly
-// what came from where and tests do not leak into each other.
-export function load({ file = '.env', env = process.env } = {}) {
-  const fromFile = read(file);
-  const merged = { ...fromFile };
-  for (const [k, v] of Object.entries(env)) {
-    if (v !== undefined && v !== '') merged[k] = v;
+// Where configuration is looked for, in increasing precedence.
+//
+// The user-level file matters more than it looks: the working directory is the
+// *workspace* -- somebody's project -- and their API keys belong with peasant,
+// not copied into every repository they point it at. Reading only ./.env meant
+// peasant worked in its own directory and nowhere else.
+//
+// A project-level .env still wins, so a repository can pin a provider or a
+// model for work done in it, and a real environment variable beats both.
+export function configFiles({ env = process.env, cwd = process.cwd(), home = os.homedir() } = {}) {
+  const userDir = env.PEASANT_HOME
+    ? expandHome(env.PEASANT_HOME, home)
+    : path.join(env.XDG_CONFIG_HOME ? expandHome(env.XDG_CONFIG_HOME, home) : path.join(home, '.config'), 'peasant');
+
+  return [
+    path.join(userDir, '.env'),
+    path.join(home, '.peasant', '.env'),
+    path.join(cwd, '.env'),
+  ];
+}
+
+function expandHome(p, home) {
+  return p.startsWith('~') ? path.join(home, p.slice(1)) : p;
+}
+
+// Merges every config file under the real environment, which always wins.
+// Returns a plain object rather than mutating process.env, so a caller can see
+// exactly what came from where and tests do not leak into each other.
+export function load({ files = null, env = process.env, cwd = process.cwd(), home = os.homedir() } = {}) {
+  const paths = files ?? configFiles({ env, cwd, home });
+  const merged = {};
+  const sources = {};
+
+  for (const file of paths) {
+    for (const [k, v] of Object.entries(read(file))) {
+      merged[k] = v;
+      sources[k] = file;
+    }
   }
+  for (const [k, v] of Object.entries(env)) {
+    if (v !== undefined && v !== '') { merged[k] = v; sources[k] = 'environment'; }
+  }
+
+  Object.defineProperty(merged, Symbol.for('peasant.sources'), { value: sources, enumerable: false });
   return merged;
+}
+
+// Where each setting came from -- for `peasant doctor`, because "it works in
+// one directory and not another" is otherwise a long afternoon.
+export function sourceOf(values, name) {
+  return values[Symbol.for('peasant.sources')]?.[name] ?? null;
 }
 
 // No inline fallbacks: ask for something absent and you get an error naming it,

@@ -24,6 +24,16 @@ export const GENERIC = {
   baseUrlVar: null,
   modelVar: null,
 
+  // A local server has no account and no key. Its keyVar still exists, because
+  // some local front-ends accept one, but an empty value is not a reason to
+  // consider the provider unusable.
+  requiresKey: true,
+
+  // Whether to include this provider when PEASANT_PROVIDERS is unset. Local
+  // servers are off by default: probing a port nobody is listening on costs a
+  // connection refusal on every start, for a provider most people do not run.
+  autoEnable: true,
+
   // Has a real response from this provider been captured and inspected?
   // tests/guard/profile-coverage.test.js requires a capture for any profile
   // claiming true, so this cannot drift into wishful thinking.
@@ -94,8 +104,14 @@ export function defineProfile(profile) {
 // No inline fallbacks: a profile missing something structural is a bug to fix
 // here, not a runtime surprise at the first request.
 function validate(p) {
+  // https everywhere, except a loopback address -- a local model server has no
+  // TLS and needs none, because the key never leaves the machine.
   if (!/^https:\/\//.test(p.baseUrl)) {
-    throw new Error(`profile ${p.name}: baseUrl must be https, got ${p.baseUrl}`);
+    const loopback = /^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?(\/|$)/.test(p.baseUrl);
+    if (!loopback) throw new Error(`profile ${p.name}: baseUrl must be https unless it is loopback, got ${p.baseUrl}`);
+    if (p.requiresKey) {
+      throw new Error(`profile ${p.name}: a plaintext loopback provider must set requiresKey: false`);
+    }
   }
   if (p.baseUrl.endsWith('/')) {
     throw new Error(`profile ${p.name}: baseUrl must not end in a slash (paths are appended)`);

@@ -11,10 +11,20 @@ import cerebras from './profiles/cerebras.js';
 import openrouter from './profiles/openrouter.js';
 import google from './profiles/google.js';
 import huggingface from './profiles/huggingface.js';
+import ollama from './profiles/ollama.js';
+import llamacpp from './profiles/llamacpp.js';
 
-export const PROFILES = Object.freeze([groq, mistral, cerebras, openrouter, google, huggingface]);
+export const PROFILES = Object.freeze([
+  groq, mistral, cerebras, openrouter, google, huggingface, ollama, llamacpp,
+]);
 
 export const PROFILE_NAMES = Object.freeze(PROFILES.map((p) => p.name));
+
+// The order used when PEASANT_PROVIDERS says nothing. Local servers are
+// excluded: probing a port nobody is listening on costs a connection refusal on
+// every start, for a provider most people do not run. Naming one explicitly
+// turns it on.
+export const DEFAULT_ORDER = Object.freeze(PROFILES.filter((p) => p.autoEnable).map((p) => p.name));
 
 export function byName(name) {
   const p = PROFILES.find((x) => x.name === name);
@@ -32,7 +42,8 @@ export function configure(profile, env) {
     profile,
     name: profile.name,
     key,
-    usable: key !== '',
+    // A local server has no account, so an empty key is not a reason to skip it.
+    usable: profile.requiresKey ? key !== '' : true,
     baseUrl: env[profile.baseUrlVar] || profile.baseUrl,
     model: env[profile.modelVar] || null,
     extraHeaders: profile.headers(env),
@@ -67,7 +78,7 @@ export function selectModel(profile, ids, override = null) {
 // failover pool, and the symptom is "it stalls sometimes".
 export function resolveOrder(env) {
   const raw = (env.PEASANT_PROVIDERS ?? '').trim();
-  const names = raw === '' ? PROFILE_NAMES : raw.split(',').map((s) => s.trim()).filter(Boolean);
+  const names = raw === '' ? DEFAULT_ORDER : raw.split(',').map((s) => s.trim()).filter(Boolean);
 
   const seen = new Set();
   for (const n of names) {

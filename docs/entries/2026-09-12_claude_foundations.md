@@ -248,8 +248,123 @@ OpenRouter 31 reasoning against 24 completion tokens — more reasoning than
 output. A budgeter counting visible text would be wrong by an order of
 magnitude.
 
+## Phase 2
+
+`Loop`, `Conversation`, the tool interface with its own small JSON Schema
+subset, seven tools, workspace confinement, and the permission policy. 302
+tests.
+
+The shape that mattered: **one declaration per tool carries the schema the model
+is shown, the validator its arguments are checked against, and the
+implementation**. `tests/guard/tool-schema.test.js` asserts `spec.function.parameters`
+and `parameters` are *the same object*, not equal copies — drift there shows up
+as a model being told one thing and refused for doing it, which it cannot
+diagnose and will simply repeat.
+
+Permission reads a tool's declared `mutates` and nothing else. It deliberately
+does not try to judge what a particular shell command *means*: parsing a shell
+line to decide whether it is dangerous is a losing game, and a check that can be
+fooled is worse than one honestly absent, because it invites trust it has not
+earned.
+
+### It works
+
+Two live tasks in a scratch directory, on free tiers. Adding a function to an
+existing file: five turns, correct edit, existing function untouched. Writing a
+`node:test` file and running it: eight turns — and halfway through, **Groq ran
+out of its 8,000 tokens a minute and OpenRouter finished the job**, with
+Cerebras retired on its 402 along the way. Nothing was asked of the user. The
+test it wrote passes when run independently.
+
+That second run is the argument for the whole provider layer, made by the system
+rather than by me.
+
+### Three bugs the live runs found
+
+**Config was read only from the working directory.** But the working directory is
+the *workspace* — somebody else's project — and keys belong with peasant, not
+copied into every repository it is pointed at. peasant worked in its own
+directory and nowhere else, and I only noticed because the sandbox run found a
+single provider: the one key that happened to be exported in the shell. Now
+`~/.config/peasant/.env`, `~/.peasant/.env` and `./.env` in increasing
+precedence, with `peasant doctor` reporting which were found and where each key
+came from.
+
+**A `bash` timeout did not kill anything.** The test asserted the right message
+and passed — while taking the full thirty seconds. Killing the shell left
+`sleep` orphaned and still holding the pipes, and `close` waits for stdio EOF.
+Commands now run in their own process group and the group is killed. The test
+suite went from 30 seconds to 2. The lesson is the test: asserting the message
+proved nothing, and asserting the *elapsed time* is what pins it.
+
+**An empty string is a model saying "default".** `glob {"path":"","pattern":"greet.js"}`
+earned "path must be a non-empty string" — a wasted turn and a wasted minute of
+an 8,000-token budget over a value whose intent was not in doubt. Empty now
+means the default where one is declared, and is kept where none is, because
+`edit.new` of `""` means delete. Defaults are applied before validation rather
+than after, or the filled value would be rejected for a `minLength` it was never
+going to violate.
+
+And one self-inflicted: a backtick inside a template literal silently ended the
+string, exactly as plugin-universe's CLAUDE.md warns. `node --check` caught it
+immediately, which is the whole reason that file says what it says.
+
+### The number that shapes Phase 4
+
+Fourteen thousand input tokens over eight turns, against Groq's eight thousand
+per minute. The system prompt and all seven tool schemas are resent on every
+turn, and nothing yet compacts anything. The harness works; it is not yet
+frugal, and frugality is half the specification.
+
+## ripgrep, and local models
+
+Three requests: use ripgrep when it is there, allow local models, and the `.env`
+was moved to `~/.config/peasant/`.
+
+**ripgrep is used, never shipped.** A bundled binary is precisely what this
+project exists to avoid; a `rg` already on the PATH was built for the machine it
+is on, and ripgrep 15.1.0 runs on the Athlon II — which is how we know. So
+`src/tools/search/` has two engines behind one door, and the interesting part is
+not either engine but `tests/unit/search-parity.test.js`, which runs **both**
+over one deliberately awkward tree and compares. It found two bugs that neither
+engine could have revealed alone:
+
+- `-g '**/.github/**'`, meant to re-include one directory after excluding
+  dotfiles, made ripgrep find **nothing at all**. In ripgrep any positive glob
+  is a whitelist. The fix was to stop fighting it: drop `--hidden` entirely,
+  because ripgrep's default already skips dot-entries while walking *and* still
+  searches a dot-path given explicitly — which is exactly what the JavaScript
+  engine does.
+- An `include` glob silently re-enabled `node_modules` and `dist`, because the
+  **last** matching glob wins and the caller's include was being appended after
+  the exclusions. A `grep --include '**/*.js'` would have searched a dependency
+  tree and spent a minute of an 8,000-token budget in one call.
+
+Both are the kind of thing that works on the machine you tested it on. Sorting
+and the match cap moved into the shared layer too, so which hundred matches you
+see cannot depend on the order an engine happened to walk the tree.
+
+A pattern ripgrep cannot compile — Rust's regex crate has no lookaround — falls
+back to the JavaScript engine rather than failing, so a valid pattern does not
+stop working because of what is installed.
+
+**Local models work.** `ollama` and `llamacpp` profiles, no key, no quota, no
+network. Two rules bend for them and both are enforced rather than trusted:
+plaintext is allowed only for a loopback address, and a profile with a loopback
+base URL must declare `requiresKey: false` or `defineProfile` throws. Neither is
+tried unless named in `PEASANT_PROVIDERS`, because probing a port nobody is
+listening on costs a connection refusal on every start.
+
+It turned out Ollama was already running on this machine, so it is verified
+rather than merely written: `PEASANT_PROVIDERS=ollama peasant ask` answered from
+`qwen2.5:0.5b` in four seconds with no network involved.
+
+Whether Ollama's own prebuilt binary runs on the Athlon II is unknown, and is
+the same question as Bun's. If it does not, `llama.cpp` built from source will,
+and the profile is already there.
+
 ## Next
 
-Phase 2: the agent loop, the tool interface and registry, the file and shell
-tools, and the permission policy. `peasant run "<task>"` reading, editing and
-running commands to completion.
+Phase 3, the interactive session — `Repl`, `Render`, `Diff`, and a Ctrl-C that
+cancels the request rather than the process. Then Phase 4, which is where the
+token arithmetic above gets dealt with.

@@ -71,8 +71,29 @@ profile fields exist.
       would be much faster than pure JS on a large tree. The cost is two code
       paths to keep behaviourally identical — and if they diverge, a guard test
       must be what notices.
-- [ ] Whether a local Ollama or llama.cpp on the target is in scope as a
-      fallback provider. It would need a CPU-baseline-safe build of its own.
+- [x] ~~Whether a local Ollama or llama.cpp is in scope~~ — both have profiles,
+      verified against a real Ollama. Still needs a CPU-baseline-safe build on
+      the target; untested there.
+
+## Phase 2 leftovers
+
+- [ ] **Turn cost is dominated by resending everything.** A two-file task used
+      ~14,000 input tokens over 8 turns, against Groq's 8,000 per minute. The
+      system prompt and all seven tool schemas go out on every turn. Phase 4.
+- [ ] `peasant run` has no session persistence: an interrupted task is lost.
+      Phase 4, with `session/Store`.
+- [ ] The turn limit (25) is an inline constant in `Loop.js`. It belongs in
+      `preferences.js` with the rest.
+- [ ] `describe()` in `Prompt.js` is used by both the prompt and the run
+      display. That is fine, but the run display calls it with a fake
+      `{ name }` object rather than the tool — tidy that seam.
+- [ ] `bin/peasant.js` is 307 lines and holds five commands. Under the ~400 line
+      threshold, but the seam is obvious: one file per command under
+      `src/cli/` when it next grows.
+- [x] ~~Decide whether `grep` should use a system `ripgrep`~~ — done. It uses one
+      when found on the PATH and the pure-JS engine otherwise, with
+      `tests/unit/search-parity.test.js` binding them. peasant still never
+      *ships* a binary.
 
 ## Guards
 

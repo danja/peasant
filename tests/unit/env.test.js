@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { parse, read, load, require_, redact } from '../../src/config/Env.js';
+import { parse, read, load, require_, redact, configFiles, sourceOf } from '../../src/config/Env.js';
 
 test('parses plain assignments in file order', () => {
   assert.deepEqual(parse('A=1\nB=two\n'), { A: '1', B: 'two' });
@@ -73,7 +73,7 @@ test('reads a real file', (t) => {
 test('the real environment beats the file', () => {
   const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'peasant-')), '.env');
   fs.writeFileSync(f, 'A=from-file\nB=from-file\n');
-  const merged = load({ file: f, env: { A: 'from-env' } });
+  const merged = load({ files: [f], env: { A: 'from-env' } });
   assert.equal(merged.A, 'from-env', 'an exported variable is a deliberate act; a file is a default');
   assert.equal(merged.B, 'from-file');
   fs.rmSync(path.dirname(f), { recursive: true, force: true });
@@ -82,8 +82,65 @@ test('the real environment beats the file', () => {
 test('an empty environment variable does not mask a file value', () => {
   const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'peasant-')), '.env');
   fs.writeFileSync(f, 'A=from-file\n');
-  assert.equal(load({ file: f, env: { A: '' } }).A, 'from-file');
+  assert.equal(load({ files: [f], env: { A: '' } }).A, 'from-file');
   fs.rmSync(path.dirname(f), { recursive: true, force: true });
+});
+
+test('a user-level config is found, not only the working directory', (t) => {
+  // The bug this pins: the working directory is the *workspace* -- somebody
+  // else's project -- and keys belong with peasant, not copied into every
+  // repository it is pointed at. Reading only ./.env meant peasant worked in
+  // its own directory and nowhere else.
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'peasant-home-'));
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'peasant-cwd-'));
+  t.after(() => { fs.rmSync(home, { recursive: true, force: true }); fs.rmSync(cwd, { recursive: true, force: true }); });
+
+  fs.mkdirSync(path.join(home, '.config', 'peasant'), { recursive: true });
+  fs.writeFileSync(path.join(home, '.config', 'peasant', '.env'), 'GROQ_API_KEY=user-level\n');
+
+  const values = load({ files: configFiles({ env: {}, cwd, home }), env: {} });
+  assert.equal(values.GROQ_API_KEY, 'user-level');
+});
+
+test('a project .env overrides the user-level one', (t) => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'peasant-home-'));
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'peasant-cwd-'));
+  t.after(() => { fs.rmSync(home, { recursive: true, force: true }); fs.rmSync(cwd, { recursive: true, force: true }); });
+
+  fs.mkdirSync(path.join(home, '.config', 'peasant'), { recursive: true });
+  fs.writeFileSync(path.join(home, '.config', 'peasant', '.env'), 'GROQ_MODEL=user\nGROQ_API_KEY=shared\n');
+  fs.writeFileSync(path.join(cwd, '.env'), 'GROQ_MODEL=project\n');
+
+  const values = load({ files: configFiles({ env: {}, cwd, home }), env: {} });
+  assert.equal(values.GROQ_MODEL, 'project', 'a repository may pin a model for work done in it');
+  assert.equal(values.GROQ_API_KEY, 'shared', 'without having to restate the key');
+});
+
+test('config files are searched in increasing precedence', () => {
+  const files = configFiles({ env: {}, cwd: '/work', home: '/home/x' });
+  assert.deepEqual(files, ['/home/x/.config/peasant/.env', '/home/x/.peasant/.env', '/work/.env']);
+});
+
+test('PEASANT_HOME and XDG_CONFIG_HOME are honoured', () => {
+  assert.equal(configFiles({ env: { PEASANT_HOME: '/custom' }, cwd: '/w', home: '/h' })[0], '/custom/.env');
+  assert.equal(configFiles({ env: { PEASANT_HOME: '~/kit' }, cwd: '/w', home: '/h' })[0], '/h/kit/.env');
+  assert.equal(configFiles({ env: { XDG_CONFIG_HOME: '/xdg' }, cwd: '/w', home: '/h' })[0], '/xdg/peasant/.env');
+});
+
+test('sourceOf says where a setting came from', (t) => {
+  // "It works in one directory and not another" is otherwise a long afternoon.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'peasant-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const f = path.join(dir, '.env');
+  fs.writeFileSync(f, 'FROM_FILE=1\n');
+  const values = load({ files: [f], env: { FROM_ENV: '2' } });
+  assert.equal(sourceOf(values, 'FROM_FILE'), f);
+  assert.equal(sourceOf(values, 'FROM_ENV'), 'environment');
+  assert.equal(sourceOf(values, 'ABSENT'), null);
+});
+
+test('a missing config file is not an error', () => {
+  assert.deepEqual(Object.keys(load({ files: ['/nowhere/.env'], env: {} })), []);
 });
 
 test('require_ names what is missing and where to put it', () => {
