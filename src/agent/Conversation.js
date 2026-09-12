@@ -30,8 +30,22 @@ export class Conversation {
   // reasoning is deliberately *not* sent back: it is the model's private
   // working, it is most of the token cost (docs/providers.md), and no provider
   // requires it echoed.
+  //
+  // An assistant message with neither content nor tool calls is refused,
+  // because it poisons the conversation permanently. Providers reject it --
+  // "invalid message provided at index 1: must have non-empty content" -- and
+  // since a 400 is our own fault by definition the router will not rotate past
+  // it, so every subsequent request fails in the same way for the rest of the
+  // session. A model that says nothing has not taken a turn.
   assistant({ content = '', toolCalls = [] }) {
     this.#assertNothingPending('an assistant message');
+
+    if ((content ?? '') === '' && toolCalls.length === 0) {
+      throw new Error(
+        'refusing to record an assistant message with no content and no tool calls: '
+        + 'providers reject it, and it would break every later request in this conversation',
+      );
+    }
 
     const message = { role: 'assistant', content: content || null };
     if (toolCalls.length > 0) {
@@ -92,6 +106,10 @@ export class Conversation {
   static fromJSON(messages) {
     const c = new Conversation();
     for (const m of messages) {
+      // Repairs a conversation recorded before that check existed, or by an
+      // older version. Resuming into a poisoned transcript would fail on every
+      // request with no way for anyone to see why.
+      if (m.role === 'assistant' && !m.tool_calls?.length && (m.content ?? '') === '') continue;
       c.#messages.push(m);
       if (m.role === 'assistant' && m.tool_calls?.length) {
         c.#pending = new Set(m.tool_calls.map((call) => call.id));

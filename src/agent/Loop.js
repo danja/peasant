@@ -47,6 +47,7 @@ export class Loop {
   async *run(conversation, { signal, estimatedTokens = 2000 } = {}) {
     const toolSpecs = specs(this.#tools);
     let current = conversation;
+    let emptyReplies = 0;
 
     for (let turn = 1; turn <= this.#maxTurns; turn++) {
       yield { type: 'turn', n: turn };
@@ -100,6 +101,20 @@ export class Loop {
         }
         yield ev;
       }
+
+      // A model that says nothing has not taken a turn. Recording it would
+      // poison the conversation for good; ignoring it silently would look like
+      // the harness hanging. So: say so, and try once more -- an empty reply is
+      // usually a model spending its whole completion on reasoning, and the
+      // second attempt generally lands.
+      if (result.content === '' && result.toolCalls.length === 0) {
+        emptyReplies++;
+        yield { type: 'empty-reply', attempt: emptyReplies, provider: result.provider };
+        if (emptyReplies <= 1) continue;
+        yield { type: 'done', reason: 'the model replied with nothing', turns: turn, result, conversation: current };
+        return;
+      }
+      emptyReplies = 0;
 
       current.assistant({ content: result.content, toolCalls: result.toolCalls });
 

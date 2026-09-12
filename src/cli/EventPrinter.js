@@ -81,6 +81,15 @@ export class EventPrinter {
           `  compacted ${ev.summarised} messages: ${ev.before} -> ${ev.after} tokens`, 'grey'));
         break;
 
+      case 'empty-reply':
+        this.#render.flush();
+        term.clearStatus();
+        term.endLine();
+        term.line(term.paint(
+          `  ${ev.provider ?? 'the model'} replied with nothing`
+          + `${ev.attempt <= 1 ? ' — trying once more' : ''}`, 'yellow'));
+        break;
+
       case 'compact-skipped':
         term.endLine();
         term.line(term.paint(`  not compacted: ${ev.reason}`, 'yellow'));

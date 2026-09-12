@@ -92,6 +92,42 @@ test('abandoning nothing is harmless', () => {
   assert.equal(c.messages.filter((m) => m.role === 'tool').length, 0);
 });
 
+test('an assistant message with nothing in it is refused', () => {
+  // It poisons the conversation permanently: providers reject it with
+  // "must have non-empty content", and a 400 is our own fault by definition so
+  // the router will not rotate past it. Every later request then fails the same
+  // way for the rest of the session.
+  const c = new Conversation().user('hi');
+  assert.throws(() => c.assistant({ content: '', toolCalls: [] }), /no content and no tool calls/);
+  assert.throws(() => c.assistant({}), /no content and no tool calls/);
+
+  // With either one, it is a real turn.
+  assert.doesNotThrow(() => c.assistant({ content: 'something' }));
+  const d = new Conversation().user('hi');
+  assert.doesNotThrow(() => d.assistant({ content: '', toolCalls: [{ id: 'c1', name: 'ls', arguments: '{}' }] }));
+});
+
+test('a conversation recorded before that check is repaired on replay', () => {
+  // Resuming into a poisoned transcript would fail on every request with no
+  // way for anyone to see why.
+  const restored = Conversation.fromJSON([
+    { role: 'system', content: 's' },
+    { role: 'user', content: 'hi' },
+    { role: 'assistant', content: null },
+    { role: 'user', content: 'continue' },
+  ]);
+  assert.deepEqual(restored.messages.map((m) => m.role), ['system', 'user', 'user']);
+});
+
+test('a replayed assistant message with tool calls survives, content or not', () => {
+  const restored = Conversation.fromJSON([
+    { role: 'assistant', content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name: 'ls', arguments: '{}' } }] },
+    { role: 'tool', tool_call_id: 'c1', content: 'ok' },
+  ]);
+  assert.equal(restored.messages.length, 2);
+  assert.deepEqual(restored.pendingToolCalls, []);
+});
+
 test('reasoning is not sent back to the provider', () => {
   // It is the model's private working, it is most of the token cost, and no
   // provider requires it echoed.
@@ -456,6 +492,38 @@ test('a short conversation is not compacted', async (t) => {
   fake.respond({ sse: frameChunks([textChunk('ok')]) });
   const events = await drain(loop, new Conversation().user('hi'));
   assert.ok(!events.some((e) => e.type === 'compacted'));
+});
+
+test('an empty reply is retried once, then reported', async (t) => {
+  // Usually a model spending its whole completion on reasoning. The second
+  // attempt generally lands; what must never happen is recording it.
+  const { fake, loop } = await harness(t);
+  const empty = { choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
+  fake.respond({ sse: frameChunks([empty]) });
+  fake.respond({ sse: frameChunks([textChunk('this time with words')]) });
+
+  const conversation = new Conversation().user('hi');
+  const events = await drain(loop, conversation);
+
+  assert.equal(events.filter((e) => e.type === 'empty-reply').length, 1);
+  assert.equal(events.at(-1).result.content, 'this time with words');
+  assert.ok(!conversation.messages.some((m) => m.role === 'assistant' && (m.content ?? '') === ''),
+    'nothing degenerate was recorded');
+});
+
+test('two empty replies end the turn rather than looping', async (t) => {
+  const { fake, loop } = await harness(t);
+  const empty = { choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
+  fake.respond({ sse: frameChunks([empty]) });
+  fake.respond({ sse: frameChunks([empty]) });
+
+  const conversation = new Conversation().user('hi');
+  const events = await drain(loop, conversation);
+  assert.equal(events.at(-1).type, 'done');
+  assert.match(events.at(-1).reason, /replied with nothing/);
+  assert.equal(conversation.messages.filter((m) => m.role === 'assistant').length, 0,
+    'and the conversation is still valid to continue');
+  assert.doesNotThrow(() => conversation.user('try again'));
 });
 
 test('stops at the turn limit rather than looping forever', async (t) => {

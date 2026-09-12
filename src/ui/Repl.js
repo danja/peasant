@@ -130,6 +130,15 @@ export class Repl {
         } else {
           this.#terminal.endLine();
           this.#terminal.error(this.#terminal.paint(e.message, 'red'));
+          // A 400 is the conversation being unacceptable rather than the
+          // provider being unavailable, so retrying the same thing repeats it
+          // exactly. Saying so is the difference between a stuck session and a
+          // recoverable one.
+          if (/HTTP 400|bad request|invalid message/i.test(e.message)) {
+            this.#terminal.error(this.#terminal.paint(
+              '  this will repeat until the conversation changes — /clear starts a fresh one',
+              'grey'));
+          }
         }
       } finally {
         this.#busy = false;
