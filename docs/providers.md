@@ -213,6 +213,43 @@ Rotation happens only **before the first token**. Once a stream has emitted
 text the user has seen it, and restarting elsewhere would duplicate or
 contradict what is on screen.
 
+## What a turn costs
+
+Measured 2026-09-12 by `bin/probe-tokens.js` against gpt-oss-20b; raw numbers in
+`raw/2026-09-12_tokens.json`.
+
+| | tokens |
+|---|---|
+| Empty request (chat template) | 72 |
+| System prompt (597 chars) | 132 |
+| **Seven tool schemas (4,098 chars)** | **738** |
+| **Fixed cost, every turn** | **942** |
+
+**Nine hundred and forty-two tokens before a word is said** — nearly 12% of
+Groq's per-minute budget, resent on every turn. That single figure is most of
+the argument for Phase 4, and the largest part of it is the tool schemas.
+
+Characters per token, consistent to within 2% across 200, 800 and 3,200
+character samples:
+
+| Content | tokens/char |
+|---|---|
+| Prose | 0.214 |
+| **Code** | **0.424** |
+| JSON with prose descriptions | 0.180 |
+
+**Code is twice as dense as prose.** A single "characters over four" constant
+(0.25) would underestimate a file read by forty per cent — in the direction that
+causes 429s. And JSON full of English descriptions packs *better* than prose,
+which is why the tool schemas were overestimated by thirty per cent until they
+got a category of their own.
+
+`TokenEstimator` starts from these constants and then calibrates against
+`usage.prompt_tokens` on every response, because every provider tokenises
+differently and the answer arrives on every turn. In a live session it settled
+at a correction of **0.90** after sixteen responses — recovering almost exactly
+the 10% safety margin the constants carry.
+
 ## Local models
 
 `ollama` and `llamacpp` profiles exist and need no key, no quota and no network.

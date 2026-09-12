@@ -41,6 +41,16 @@ function walk(dir, out) {
 //              tested for being *inside* one. Strings do not nest, so every
 //              range recorded here is top level.
 //
+// Regular expression literals are recognised too, and must be: a quote or a
+// backtick inside a character class would otherwise open a string that never
+// closes and swallow the rest of the file. That happened -- a regex containing
+// a backtick made every comment after it survive the strip, and the provider
+// guard reported a name that was only ever in prose.
+//
+// Telling a regex from a division is genuinely ambiguous in JavaScript, so this
+// uses the usual heuristic: a `/` begins a regex when the last meaningful
+// character before it is one after which a value cannot appear.
+//
 // Template literals are treated as opaque strings: a `${}` hole containing an
 // import is not seen. That is a deliberate limit, not an oversight -- it would
 // need a real parser, and an import inside an interpolation is not a thing this
@@ -68,6 +78,24 @@ export function scanSource(src) {
       continue;
     }
 
+    if (c === '/' && startsRegex(clean)) {
+      clean += c; i++;
+      let inClass = false;
+      while (i < n) {
+        const r = src[i];
+        if (r === '\\') { clean += src.slice(i, i + 2); i += 2; continue; }
+        if (r === '\n') break; // unterminated; bail rather than eat the file
+        if (r === '[') inClass = true;
+        else if (r === ']') inClass = false;
+        else if (r === '/' && !inClass) break;
+        clean += r; i++;
+      }
+      if (i < n && src[i] === '/') { clean += '/'; i++; }
+      // Flags.
+      while (i < n && /[a-z]/.test(src[i])) { clean += src[i]; i++; }
+      continue;
+    }
+
     if (c === '"' || c === "'" || c === '`') {
       const quote = c;
       clean += c; i++;
@@ -85,6 +113,17 @@ export function scanSource(src) {
   }
 
   return { clean, strings };
+}
+
+// A `/` starts a regex when a value cannot legally precede it. Anything else --
+// an identifier, a number, a closing bracket -- means division.
+const BEFORE_REGEX = /[(,=:[!&|?{};+\-*%^~<>]$/;
+const KEYWORD_BEFORE_REGEX = /\b(?:return|typeof|instanceof|in|of|new|delete|void|case|do|else|yield|await)$/;
+
+function startsRegex(before) {
+  const trimmed = before.replace(/\s+$/, '');
+  if (trimmed === '') return true;
+  return BEFORE_REGEX.test(trimmed) || KEYWORD_BEFORE_REGEX.test(trimmed);
 }
 
 const SPECIFIER = String.raw`['"]([^'"\n]*)['"]`;

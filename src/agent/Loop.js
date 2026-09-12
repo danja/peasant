@@ -18,14 +18,20 @@ export class Loop {
   #prompt;
   #root;
   #maxTurns;
+  #budget;
+  #compactor;
+  #estimator;
 
-  constructor({ router, tools, policy, prompt, root, maxTurns = DEFAULT_MAX_TURNS }) {
+  constructor({ router, tools, policy, prompt, root, maxTurns = DEFAULT_MAX_TURNS, budget = null, compactor = null, estimator = null }) {
     this.#router = router;
     this.#tools = tools;
     this.#policy = policy;
     this.#prompt = prompt;
     this.#root = root;
     this.#maxTurns = maxTurns;
+    this.#budget = budget;
+    this.#compactor = compactor;
+    this.#estimator = estimator;
   }
 
   #tool(name) {
@@ -40,23 +46,67 @@ export class Loop {
   //   done        { reason, turns }
   async *run(conversation, { signal, estimatedTokens = 2000 } = {}) {
     const toolSpecs = specs(this.#tools);
+    let current = conversation;
 
     for (let turn = 1; turn <= this.#maxTurns; turn++) {
       yield { type: 'turn', n: turn };
 
+      // Compact *before* asking, not after a refusal: a request that does not
+      // fit costs a round trip and, on a free tier, possibly a cooldown.
+      if (this.#budget && this.#compactor) {
+        const client = this.#router.clients[0];
+        if (client && this.#budget.shouldCompact(current, toolSpecs, client)) {
+          const before = this.#budget.estimate(current, toolSpecs);
+          const outcome = await this.#compactor.compact(current, {
+            signal,
+            // The summary is itself a request, and carries no tools. Without
+            // this the compactor tries to send one at exactly the moment
+            // nothing can be sent.
+            canAfford: (messages) => this.#budget.fits({ messages }, [], client).fits,
+            // What the compacted conversation has to fit inside: the real
+            // request, tool schemas included.
+            targetFits: (messages) => this.#budget.fits({ messages }, toolSpecs, client).fits,
+          });
+          if (outcome.compacted) {
+            current = outcome.conversation;
+            yield {
+              type: 'compacted',
+              before,
+              after: this.#budget.estimate(current, toolSpecs),
+              summarised: outcome.summarised,
+              mechanical: Boolean(outcome.mechanical),
+              reason: outcome.reason ?? null,
+            };
+          } else if (!outcome.quiet) {
+            yield { type: 'compact-skipped', reason: outcome.reason };
+          }
+        }
+      }
+
+      const predicted = this.#budget
+        ? this.#budget.estimate(current, toolSpecs)
+        : estimatedTokens;
+
       let result = null;
       for await (const ev of this.#router.stream(
-        { messages: conversation.messages, tools: toolSpecs, signal },
-        { estimatedTokens },
+        { messages: current.messages, tools: toolSpecs, signal },
+        { estimatedTokens: predicted },
       )) {
         if (ev.type === 'done') { result = ev.result; break; }
+        if (ev.type === 'usage') {
+          // Every response says exactly how wrong the estimate was. Ignoring
+          // that would be choosing to stay wrong.
+          this.#estimator?.observe({ predicted, actual: ev.usage.prompt_tokens });
+        }
         yield ev;
       }
 
-      conversation.assistant({ content: result.content, toolCalls: result.toolCalls });
+      current.assistant({ content: result.content, toolCalls: result.toolCalls });
 
       if (result.toolCalls.length === 0) {
-        yield { type: 'done', reason: 'finished', turns: turn, result };
+        yield {
+          type: 'done', reason: 'finished', turns: turn, result, conversation: current,
+        };
         return;
       }
 
@@ -66,12 +116,12 @@ export class Loop {
       for (const call of result.toolCalls) {
         yield { type: 'tool-start', name: call.name, args: call.args };
         const { ok, content } = await this.#runOne(call, signal);
-        conversation.toolResult(call.id, content);
+        current.toolResult(call.id, content);
         yield { type: 'tool-result', name: call.name, ok, content };
       }
     }
 
-    yield { type: 'done', reason: 'turn limit', turns: this.#maxTurns };
+    yield { type: 'done', reason: 'turn limit', turns: this.#maxTurns, conversation: current };
   }
 
   // Returns { ok, content }. Content always goes back to the model, including

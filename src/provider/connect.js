@@ -8,6 +8,19 @@ import { OpenAICompatClient } from './OpenAICompatClient.js';
 import { Router } from './Router.js';
 import { preferences } from '../config/preferences.js';
 
+// The catalogue field naming a context window, where a provider publishes one.
+// OpenRouter and Ollama do; Groq, Mistral, Google and Hugging Face do not, so
+// null is the normal answer and must stay distinguishable from zero.
+function windowOf(details, model) {
+  const entry = details.find((m) => (m.id ?? m.name) === model);
+  if (!entry) return null;
+  for (const field of ['context_length', 'max_context_window_tokens', 'context_window', 'max_model_len']) {
+    const v = entry[field];
+    if (Number.isInteger(v) && v > 0) return v;
+  }
+  return null;
+}
+
 // Resolves each usable provider's model, asking its catalogue only when the
 // configuration does not already say. Listing models costs a request but no
 // tokens, and choosing wrongly costs a confusing failure much later.
@@ -31,8 +44,10 @@ export async function connect(env, { signal, onProgress = () => {} } = {}) {
     try {
       if (!config.model) {
         onProgress(`resolving a model for ${config.name}`);
-        const ids = await client.listModels({ signal });
+        const details = await client.listModelDetails({ signal });
+        const ids = details.map((m) => m.id ?? m.name).filter(Boolean);
         config.model = selectModel(config.profile, ids, null);
+        config.contextWindow = windowOf(details, config.model);
       }
       clients.push(new OpenAICompatClient(config));
     } catch (e) {

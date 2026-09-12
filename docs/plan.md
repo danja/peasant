@@ -143,13 +143,38 @@ two-turn session read a file, answered about it, then edited it.
   turns, against Groq's 8,000/minute. The system prompt and seven tool schemas
   go out on every turn. This is what Phase 4 is for.
 
-## Phase 4 — Context economy
+## Phase 4 — Context economy — **mostly complete**
 
-`TokenEstimator` calibrated against real `usage`, `ContextBudget`, `Compactor`,
-tool-result truncation, `session/Store` with resume and fork.
+`TokenEstimator`, `ContextBudget`, `Compactor`, and `bin/probe-tokens.js` which
+measured the constants they rest on. Tool-result truncation was already in
+`Tool.invoke`. **`session/Store` is the piece still outstanding.**
 
-**Deliverable:** a long session that survives an 8,000 TPM budget, with tokens
-used, turns and wall time recorded in `docs/entries/` — measured, not asserted.
+**Verified live:** a session at `PEASANT_COMPACT_AT=0.15` compacted twice and
+shrank both times, and the estimator settled at a 0.90 correction after sixteen
+responses — recovering almost exactly the 10% safety margin its constants carry.
+
+The measurement that drove the design: **942 tokens of fixed cost per turn**,
+738 of it tool schemas, against Groq's 8,000 per minute (`docs/providers.md`).
+
+### What Phase 4 exposed
+
+- **Compaction deadlocks exactly when it is needed.** The summary is itself a
+  request, and the moment a conversation is most over budget is the moment a
+  summary cannot be sent either. There is now a mechanical fallback that costs
+  nothing: elide old tool results, then drop oldest exchanges, always keeping
+  the system message and the last thing said.
+- **Two different affordability questions.** Whether the *summary request* fits
+  (no tools) is not whether the *compacted conversation* fits (tool schemas
+  included). Conflating them stopped the fallback at a size that still could not
+  be sent.
+- **Compaction made a conversation larger.** 1,248 tokens became 1,358, three
+  times in one session: a model writes to the length it is asked for, not the
+  length of its input. The summary word budget now scales to what it replaces,
+  and a summary that does not shrink the conversation is refused.
+- **The scanner could not read its own source.** A regex containing a backtick
+  was read as a template literal, swallowing every comment after it — which
+  surfaced as the provider guard reporting a name that was only ever in prose.
+  `scanSource` recognises regex literals now.
 
 ## Phase 5 — Extensibility
 

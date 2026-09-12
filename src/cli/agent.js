@@ -6,8 +6,8 @@ import { Loop } from '../agent/Loop.js';
 import { TOOLS } from '../tools/registry.js';
 import { EventPrinter } from './EventPrinter.js';
 
-export function makeLoop({ router, policy, prompt, root }) {
-  return new Loop({ router, tools: TOOLS, policy, prompt, root });
+export function makeLoop({ router, policy, prompt, root, budget, compactor, estimator }) {
+  return new Loop({ router, tools: TOOLS, policy, prompt, root, budget, compactor, estimator });
 }
 
 export async function runTurn(term, loop, conversation, { signal, router }) {
@@ -39,5 +39,8 @@ export async function runTurn(term, loop, conversation, { signal, router }) {
   for (const [name, why] of router.retired) {
     term.error(term.paint(`  ${name} withdrawn for this session: ${why}`, 'yellow'));
   }
-  return last;
+
+  // Compaction builds a new conversation, so the caller has to adopt it or the
+  // compaction is silently discarded and the next turn is just as large.
+  return { done: last, conversation: last?.conversation ?? conversation };
 }

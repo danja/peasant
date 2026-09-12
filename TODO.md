@@ -34,8 +34,10 @@ checks on the target, the floor is `>=22.0.0`, and Phase 1 can start.
       which matters more here than usual.
 - [ ] R5: terminal capability survey on the target — `TERM`, colour depth,
       unicode width, raw mode behaviour.
-- [ ] R6: pure-JS token estimation calibrated against reported `usage`, with its
-      error measured. No tokeniser package: WASM and BPE tables are both banned.
+- [x] ~~R6: pure-JS token estimation~~ — done. `bin/probe-tokens.js` measured the
+      constants against a live provider; `TokenEstimator` calibrates against
+      `usage.prompt_tokens` on every response and settled at 0.90 in a real
+      session. See `docs/providers.md`.
 
 ## Known dialect quirks to encode in profiles
 
@@ -77,13 +79,16 @@ profile fields exist.
 
 ## Phase 2 leftovers
 
-- [ ] **Turn cost is dominated by resending everything.** A two-file task used
-      ~14,000 input tokens over 8 turns, against Groq's 8,000 per minute. The
-      system prompt and all seven tool schemas go out on every turn. Phase 4.
-- [ ] Neither `run` nor the session persists anything: close the terminal and
-      the conversation is gone. Phase 4, with `session/Store`.
-- [ ] The turn limit (25) is an inline constant in `Loop.js`. It belongs in
-      `preferences.js` with the rest.
+- [ ] **The tool schemas cost 738 tokens on every turn** — measured, and 78% of
+      the 942-token fixed cost. Worth attacking directly: the descriptions are
+      verbose, and a task that will never write a file does not need `write`,
+      `edit` and `bash` described to it. Sending a subset would be the single
+      largest saving available.
+- [ ] **`session/Store`** — the remaining Phase 4 piece. Neither `run` nor the
+      session persists anything: close the terminal and the conversation is
+      gone, including everything it cost to build.
+- [ ] The turn limit (25) and `KEEP_RECENT` (6) are inline constants. They
+      belong in `preferences.js` with the rest.
 - [ ] `EventPrinter` calls `describe()` with a fake `{ name }` object rather
       than the tool. It works because `describe` only reads `.name`, but it is a
       seam that will break the first time it needs anything else.

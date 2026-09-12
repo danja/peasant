@@ -5,6 +5,9 @@ import { configFiles, sourceOf } from '../config/Env.js';
 import { PROFILES } from '../provider/ProfileRegistry.js';
 import { engineName } from '../tools/search/index.js';
 import { build } from './context.js';
+import { estimateRequest } from '../agent/TokenEstimator.js';
+import { specs } from '../tools/registry.js';
+import { systemPrompt } from '../agent/prompt.js';
 
 export async function providers(term, env, { signal } = {}) {
   const { clients, failed, skipped, prefs, router } = await build(term, env, { signal });
@@ -61,6 +64,17 @@ export async function doctor(term, env, pkg, { signal } = {}) {
       ? '  javascript (no ripgrep on PATH; install it for faster grep on large trees)'
       : `  ${engine} (found on PATH; peasant never bundles a binary)`,
     'grey'));
+  term.line('');
+
+  term.line(term.paint('cost per turn', 'bold'));
+  const toolSpecs = specs();
+  const sys = systemPrompt({ root: process.cwd() });
+  const fixed = estimateRequest({ messages: [{ role: 'system', content: sys }], tools: toolSpecs });
+  term.line(term.paint(
+    `  ~${fixed} tokens before anything is said (${toolSpecs.length} tool schemas + system prompt),`
+    + ' resent on every turn', 'grey'));
+  term.line(term.paint(
+    '  the schemas alone measured 738 tokens against a live provider — see docs/providers.md', 'grey'));
   term.line('');
 
   term.line(term.paint('configuration', 'bold'));

@@ -1,10 +1,11 @@
 // The system prompt.
 //
-// It is resent with every request, so at Groq's measured 8,000 tokens a minute
-// every line costs budget on every turn of every session. This one is about 200
-// tokens, and that is a deliberate ceiling rather than an accident: anything
-// that could be learned from a tool description belongs in the tool
-// description, where it is sent once in the schema rather than restated here.
+// It is resent with every request, so every line costs budget on every turn of
+// every session. Measured at **132 tokens** (bin/probe-tokens.js, 2026-09-12) --
+// which is small next to the 738 the tool schemas cost, and that is the right
+// proportion: anything that could be learned from a tool description belongs in
+// the tool description, where it is sent once in the schema rather than
+// restated here.
 
 export function systemPrompt({ root, platform = process.platform }) {
   return [

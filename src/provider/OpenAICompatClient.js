@@ -62,6 +62,10 @@ export class OpenAICompatClient {
 
   get name() { return this.#config.name; }
   get model() { return this.#config.model; }
+
+  // Tokens the selected model can hold, where the provider's catalogue says.
+  // Most do not, and null means unknown rather than zero.
+  get contextWindow() { return this.#config.contextWindow ?? null; }
   get profile() { return this.#config.profile; }
   get limiter() { return this.#limiter; }
 
@@ -109,6 +113,17 @@ export class OpenAICompatClient {
     if (!res.ok) throw this.#error('listing models failed', res, text);
     const parsed = JSON.parse(text);
     return (parsed.data ?? parsed.models ?? []).map((m) => m.id ?? m.name).filter(Boolean);
+  }
+
+  // The full catalogue entries, for the fields beyond the id. Kept separate
+  // from listModels so the common case stays a list of strings.
+  async listModelDetails({ signal } = {}) {
+    const res = await this.#fetch(`${this.#config.baseUrl}/models`, { headers: this.#headers(), signal });
+    this.#limiter.observe(res.headers);
+    const text = await res.text();
+    if (!res.ok) throw this.#error('listing models failed', res, text);
+    const parsed = JSON.parse(text);
+    return parsed.data ?? parsed.models ?? [];
   }
 
   #error(what, res, body) {

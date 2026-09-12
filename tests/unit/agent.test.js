@@ -13,6 +13,9 @@ import { Router } from '../../src/provider/Router.js';
 import { OpenAICompatClient } from '../../src/provider/OpenAICompatClient.js';
 import { defineProfile } from '../../src/provider/profiles/generic.js';
 import { FakeProvider, frameChunks } from './lib/FakeProvider.js';
+import { TokenEstimator } from '../../src/agent/TokenEstimator.js';
+import { ContextBudget } from '../../src/agent/ContextBudget.js';
+import { Compactor } from '../../src/agent/Compactor.js';
 
 // --- Conversation ----------------------------------------------------------
 
@@ -176,6 +179,14 @@ test('the prompt describes what will happen, not the argument JSON', () => {
 const profile = defineProfile({
   name: 'fake', baseUrl: 'https://fake.invalid/v1',
   keyVar: 'F_API_KEY', baseUrlVar: 'F_BASE_URL', modelVar: 'F_MODEL',
+  // Named, so the limiter has something to learn from -- without these the
+  // budget is unknown and nothing is ever over it.
+  rateLimit: {
+    limitTokens: 'x-ratelimit-limit-tokens',
+    remainingTokens: 'x-ratelimit-remaining-tokens',
+    resetTokens: 'x-ratelimit-reset-tokens',
+    resetFormat: 'duration',
+  },
 });
 
 function toolCallChunk(id, name, args) {
@@ -192,7 +203,7 @@ function textChunk(text) {
   return { choices: [{ index: 0, delta: { content: text }, finish_reason: 'stop' }] };
 }
 
-async function harness(t, { policy = new Policy({ mode: 'allow' }), files = {}, maxTurns } = {}) {
+async function harness(t, { policy = new Policy({ mode: 'allow' }), files = {}, maxTurns, withBudget = false } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'peasant-loop-')));
   for (const [name, content] of Object.entries(files)) {
     fs.mkdirSync(path.dirname(path.join(root, name)), { recursive: true });
@@ -205,12 +216,22 @@ async function harness(t, { policy = new Policy({ mode: 'allow' }), files = {}, 
     profile, name: 'fake', key: 'k', baseUrl: fake.baseUrl, model: 'm', extraHeaders: {},
   });
   const prompt = { ask: async () => ({ decision: DECISION.deny, reason: 'no terminal' }) };
+  const router = new Router([client], { sleep: async () => {} });
+  const estimator = new TokenEstimator();
+  const extras = withBudget
+    ? {
+      estimator,
+      budget: new ContextBudget({ estimator, compactAt: 0.5 }),
+      compactor: new Compactor({ router, estimator }),
+    }
+    : { estimator };
+
   const loop = new Loop({
-    router: new Router([client], { sleep: async () => {} }),
-    tools: TOOLS, policy, prompt, root,
+    router, tools: TOOLS, policy, prompt, root,
+    ...extras,
     ...(maxTurns === undefined ? {} : { maxTurns }),
   });
-  return { fake, loop, root, prompt };
+  return { fake, loop, root, prompt, client, estimator };
 }
 
 async function drain(loop, conversation) {
@@ -335,6 +356,106 @@ test('every tool call is answered, including failures', async (t) => {
   const toolMessages = conversation.messages.filter((m) => m.role === 'tool');
   assert.deepEqual(toolMessages.map((m) => m.tool_call_id), ['c1', 'c2']);
   assert.deepEqual(conversation.pendingToolCalls, []);
+});
+
+test('the estimator learns from what each response actually cost', async (t) => {
+  // Every response hands back usage.prompt_tokens. Not using it would be
+  // choosing to stay wrong when the answer arrives on every turn.
+  const { fake, loop, estimator } = await harness(t);
+  fake.respond({
+    sse: frameChunks([
+      textChunk('ok'),
+      { choices: [], usage: { prompt_tokens: 4321, completion_tokens: 2, total_tokens: 4323 } },
+    ]),
+  });
+  assert.equal(estimator.observations, 0);
+  await drain(loop, new Conversation().user('hi'));
+  assert.equal(estimator.observations, 1, 'the reported usage was fed back');
+  assert.notEqual(estimator.correction, 1, 'and it moved the correction');
+});
+
+test('compacts before asking, not after being refused', async (t) => {
+  // A request that does not fit costs a round trip and, on a free tier,
+  // possibly a cooldown. Compacting first avoids paying for the refusal.
+  const { fake, loop, client } = await harness(t, { withBudget: true });
+  // 2,000 rather than something tiny: the seven tool schemas alone cost about
+  // 830 estimated tokens, so a limit below that makes *every* request
+  // impossible and tests nothing about compaction.
+  client.limiter.observe({
+    'x-ratelimit-limit-tokens': '2000',
+    'x-ratelimit-remaining-tokens': '2000',
+    'x-ratelimit-reset-tokens': '60s',
+  });
+
+  const conversation = new Conversation({ system: 'be helpful' });
+  for (let i = 0; i < 8; i++) {
+    conversation.user(`question ${i} `.repeat(30));
+    conversation.assistant({ content: `answer ${i} `.repeat(30) });
+  }
+
+  fake.respond({ sse: frameChunks([textChunk('a summary of what went before')]) });
+  fake.respond({ sse: frameChunks([textChunk('done')]) });
+
+  const events = await drain(loop, conversation);
+  const compacted = events.find((e) => e.type === 'compacted');
+  assert.ok(compacted, 'the conversation was over the threshold and should have been compacted');
+  assert.ok(compacted.after < compacted.before, `${compacted.before} -> ${compacted.after}`);
+
+  // And the compacted conversation is what was sent.
+  const sent = fake.lastRequest.body.messages;
+  assert.ok(sent.some((m) => /Notes from earlier/.test(m.content ?? '')));
+  assert.equal(events.at(-1).type, 'done');
+});
+
+test('compaction falls back to something free when a summary cannot be afforded', async (t) => {
+  // The deadlock this exists for: the summary is itself a request, and the
+  // moment the conversation is most over budget is exactly the moment a
+  // summary cannot be sent either. The fallback costs nothing and always makes
+  // progress.
+  const { fake, loop, client } = await harness(t, { withBudget: true });
+  client.limiter.observe({
+    'x-ratelimit-limit-tokens': '1200',
+    'x-ratelimit-remaining-tokens': '1200',
+    'x-ratelimit-reset-tokens': '60s',
+  });
+
+  const conversation = new Conversation({ system: 'be helpful' });
+  for (let i = 0; i < 10; i++) {
+    conversation.user(`question ${i} `.repeat(60));
+    conversation.assistant({ content: `answer ${i} `.repeat(60) });
+  }
+
+  fake.respond({ sse: frameChunks([textChunk('done')]) });
+  const events = await drain(loop, conversation);
+
+  const compacted = events.find((e) => e.type === 'compacted');
+  assert.ok(compacted, 'it must still compact');
+  assert.equal(compacted.mechanical, true, 'and without spending a request it cannot afford');
+  assert.match(compacted.reason, /would not fit/);
+  assert.ok(compacted.after < compacted.before);
+  assert.equal(fake.requests.length, 1, 'no summary request was attempted');
+});
+
+test('the done event carries the conversation, which may be a new one', async (t) => {
+  // Compaction builds a new Conversation. A caller that keeps its own reference
+  // silently discards the compaction and the next turn is just as large.
+  const { fake, loop } = await harness(t);
+  fake.respond({ sse: frameChunks([textChunk('ok')]) });
+  const conversation = new Conversation().user('hi');
+  const events = await drain(loop, conversation);
+  assert.ok(events.at(-1).conversation, 'done must carry the conversation to adopt');
+});
+
+test('a short conversation is not compacted', async (t) => {
+  const { fake, loop, client } = await harness(t, { withBudget: true });
+  client.limiter.observe({
+    'x-ratelimit-limit-tokens': '100000',
+    'x-ratelimit-remaining-tokens': '100000',
+    'x-ratelimit-reset-tokens': '60s',
+  });
+  fake.respond({ sse: frameChunks([textChunk('ok')]) });
+  const events = await drain(loop, new Conversation().user('hi'));
+  assert.ok(!events.some((e) => e.type === 'compacted'));
 });
 
 test('stops at the turn limit rather than looping forever', async (t) => {

@@ -1,0 +1,92 @@
+{
+  "date": "2026-09-12",
+  "provider": "groq",
+  "model": "openai/gpt-oss-20b",
+  "baseline": 72,
+  "toolSchemaCost": 738,
+  "toolSchemaChars": 4098,
+  "toolCount": 7,
+  "systemPromptCost": 132,
+  "systemPromptChars": 597,
+  "samples": [
+    {
+      "label": "baseline",
+      "tokens": 72,
+      "chars": 31,
+      "textChars": 1
+    },
+    {
+      "label": "prose 200",
+      "tokens": 114,
+      "chars": 230,
+      "kind": "prose",
+      "textChars": 200
+    },
+    {
+      "label": "prose 800",
+      "tokens": 243,
+      "chars": 830,
+      "kind": "prose",
+      "textChars": 800
+    },
+    {
+      "label": "prose 3200",
+      "tokens": 757,
+      "chars": 3230,
+      "kind": "prose",
+      "textChars": 3200
+    },
+    {
+      "label": "code 200",
+      "tokens": 153,
+      "chars": 240,
+      "kind": "code",
+      "textChars": 200
+    },
+    {
+      "label": "code 800",
+      "tokens": 407,
+      "chars": 875,
+      "kind": "code",
+      "textChars": 800
+    },
+    {
+      "label": "code 3200",
+      "tokens": 1430,
+      "chars": 3414,
+      "kind": "code",
+      "textChars": 3200
+    },
+    {
+      "label": "1 message(s)",
+      "tokens": 157,
+      "chars": 430,
+      "messageCount": 1,
+      "textChars": 400
+    },
+    {
+      "label": "4 message(s)",
+      "tokens": 175,
+      "chars": 527,
+      "messageCount": 4,
+      "textChars": 400
+    },
+    {
+      "label": "no tools",
+      "tokens": 72,
+      "chars": 31
+    },
+    {
+      "label": "with tools",
+      "tokens": 810,
+      "chars": 31,
+      "toolCount": 7
+    },
+    {
+      "label": "system prompt",
+      "tokens": 204,
+      "chars": 670,
+      "systemChars": 597
+    }
+  ]
+}

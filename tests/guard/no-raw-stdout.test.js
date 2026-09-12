@@ -22,6 +22,7 @@ const ALLOWED = [
   path.join('src', 'compat', 'Preflight.js'),
   path.join('bin', 'probe-runtime.js'),
   path.join('bin', 'probe-providers.js'),
+  path.join('bin', 'probe-tokens.js'),
 ];
 
 const WRITERS = /\b(?:process\.(?:stdout|stderr)\.write|console\.(?:log|info|warn|error|debug|table|dir))\b/;

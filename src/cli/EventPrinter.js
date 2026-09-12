@@ -74,6 +74,18 @@ export class EventPrinter {
         term.line(term.paint(`    ${firstLine(ev.content)}`, ev.ok ? 'grey' : 'yellow'));
         break;
 
+      case 'compacted':
+        this.#render.flush();
+        term.endLine();
+        term.line(term.paint(
+          `  compacted ${ev.summarised} messages: ${ev.before} -> ${ev.after} tokens`, 'grey'));
+        break;
+
+      case 'compact-skipped':
+        term.endLine();
+        term.line(term.paint(`  not compacted: ${ev.reason}`, 'yellow'));
+        break;
+
       case 'done':
         this.#render.flush();
         term.clearStatus();

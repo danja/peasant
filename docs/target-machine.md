@@ -52,6 +52,16 @@ us nothing and should not appear in any build flag.
   otherwise. See `TODO.md`; this is a design decision, not yet taken.
 - **No bun, no deno**, which is exactly as it should be.
 
+## It works
+
+**2026-09-12: an interactive `peasant` session ran on this machine and Groq
+answered.** That is the whole premise of the project demonstrated on the target
+hardware — the same machine on which OpenCode and current Claude Code die with
+`SIGILL` before printing anything.
+
+Nothing had to bend for the processor beyond the rule against Bun. No V8 flags,
+no build from source, no special baseline.
+
 ## Still outstanding
 
 Nothing about the runtime. The open questions here are the terminal capability

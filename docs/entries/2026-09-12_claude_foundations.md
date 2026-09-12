@@ -417,8 +417,95 @@ describing the escape sequences readline had emitted. The guard was right to
 look and wrong to match prose, so it strips comments now, as the other scanning
 guards already did.
 
+## Phase 4
+
+The half of the specification that was still outstanding. `TokenEstimator`,
+`ContextBudget`, `Compactor`, and `bin/probe-tokens.js` which measured the
+constants the first of them rests on. 392 tests.
+
+### Measuring first
+
+An estimator is only worth having if its error is known and its bias is the safe
+way round: underestimating costs a 429 and a cooldown, overestimating costs a
+short wait. So the constants were measured against a live provider rather than
+chosen.
+
+| | tokens |
+|---|---|
+| Empty request | 72 |
+| System prompt | 132 |
+| **Seven tool schemas** | **738** |
+| **Fixed cost, every turn** | **942** |
+
+Nine hundred and forty-two tokens before a word is said — nearly 12% of Groq's
+per-minute budget, resent on every turn. That is most of the argument for this
+phase, and 78% of it is the tool schemas.
+
+Two things surprised me. **Code is twice as dense as prose** — 0.424 tokens per
+character against 0.214 — so the usual "characters over four" would underestimate
+a file read by forty per cent, in the direction that causes 429s. And **JSON full
+of English descriptions packs better than prose**, at 0.18, which is why the tool
+schemas were being overestimated by thirty per cent until they got a category of
+their own.
+
+The estimator then calibrates against `usage.prompt_tokens` on every response,
+because every provider tokenises differently and the answer is handed to us on
+every turn. In a live session it settled at a correction of **0.90** after
+sixteen responses, recovering almost exactly the 10% safety margin its constants
+carry. That it converged on the right answer from a cold start is the most
+satisfying thing here.
+
+### Compaction deadlocks exactly when you need it
+
+The design walked straight into this and a test found it: **the summary is
+itself a request**, and the moment a conversation is most over budget is the
+moment a summary cannot be sent either. A compactor that can only compact when
+it is not needed is not a compactor.
+
+So there is a mechanical fallback that costs nothing and always makes progress:
+elide old tool results — the bulkiest thing in a coding session and the most
+superseded, a file read four turns ago having usually been edited since — then
+drop oldest exchanges, always keeping the system message and the last thing
+said.
+
+Getting that right took two more corrections. **Two different affordability
+questions** had been conflated: whether the *summary request* fits (it carries
+no tools) is not whether the *compacted conversation* fits (it carries 738
+tokens of schemas). The fallback was stopping at a size that still could not be
+sent. And the recent window has to be cuttable too — on a small budget the tool
+schemas can cost more than the whole recent window, and then keeping six
+messages is not a policy but a guarantee of failure.
+
+### Compaction made a conversation bigger
+
+Live, three times in one session: 1,248 tokens became 1,358. The summary path
+never checked that it had saved anything, and a model writes to the length it is
+asked for, not the length of its input — I had asked for 400 words regardless.
+The word budget now scales to what is being replaced, and a summary that does
+not shrink the conversation is refused in favour of the mechanical path. After
+the fix, both compactions in the same session shrank.
+
+### The scanner could not read its own source
+
+A regex in `TokenEstimator.js` contains a backtick, inside a character class.
+`scanSource` had no idea regex literals existed, read it as a template literal
+opener, and swallowed every comment after it — which surfaced as the *provider*
+guard reporting a name that appeared only in prose.
+
+The fix is a regex-literal mode with the usual heuristic for telling one from a
+division. It is the third time `tests/guard/scanner.test.js` has earned its
+place, and it now also scans every shipped file and asserts the strip preserves
+length and line count — so a construct that breaks the scan shows up as a
+scanner failure rather than as a mystery in an unrelated guard.
+
 ## Next
 
-Phase 4, the context economy — `Repl`, `Render`, `Diff`, and a Ctrl-C that
+`session/Store` — the remaining Phase 4 piece. Neither `run` nor the session
+persists anything, so closing the terminal loses the conversation and everything
+it cost to build.
+
+After that, the largest saving still available is the 738 tokens of tool
+schemas. The descriptions are verbose, and a task that will never write a file
+does not need `write`, `edit` and `bash` described to it on every turn. — `Repl`, `Render`, `Diff`, and a Ctrl-C that
 cancels the request rather than the process. Then Phase 4, which is where the
 token arithmetic above gets dealt with.

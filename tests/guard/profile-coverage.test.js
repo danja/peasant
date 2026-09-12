@@ -78,7 +78,10 @@ test('no provider is named outside profiles/ and the registry', () => {
   const allowed = [
     path.join('src', 'provider', 'profiles'),
     path.join('src', 'provider', 'ProfileRegistry.js'),
-    path.join('bin', 'probe-providers.js'), // the research tool that predates profiles; see TODO.md
+    // The probes take a provider on the command line by name, which is the
+    // point of them: they are diagnostics run against one provider at a time.
+    path.join('bin', 'probe-providers.js'),
+    path.join('bin', 'probe-tokens.js'),
   ];
   const names = new RegExp(`\\b(${PROFILE_NAMES.join('|')})\\b`, 'i');
   const offenders = [];

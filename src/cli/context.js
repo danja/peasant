@@ -7,6 +7,9 @@ import { connect } from '../provider/connect.js';
 import { Policy } from '../permission/Policy.js';
 import { Prompt } from '../permission/Prompt.js';
 import { workspaceRoot } from '../tools/paths.js';
+import { TokenEstimator } from '../agent/TokenEstimator.js';
+import { ContextBudget } from '../agent/ContextBudget.js';
+import { Compactor } from '../agent/Compactor.js';
 
 export async function build(term, env, { allowAll = false, signal, quiet = false } = {}) {
   const root = workspaceRoot();
@@ -24,7 +27,11 @@ export async function build(term, env, { allowAll = false, signal, quiet = false
   const policy = new Policy({ mode: allowAll ? 'allow' : (env.PEASANT_PERMISSION_MODE ?? 'ask') });
   const prompt = new Prompt({ terminal: term });
 
-  return { root, router, clients, failed, skipped, prefs, policy, prompt };
+  const estimator = new TokenEstimator();
+  const budget = new ContextBudget({ estimator, compactAt: prefs.compactAt });
+  const compactor = new Compactor({ router, estimator });
+
+  return { root, router, clients, failed, skipped, prefs, policy, prompt, estimator, budget, compactor };
 }
 
 // A mutating tool with mode `ask` and no terminal cannot be resolved: hanging

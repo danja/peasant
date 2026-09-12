@@ -15,12 +15,14 @@ import { systemPrompt } from '../agent/prompt.js';
 import { build, assertCanAsk } from './context.js';
 import { makeLoop, runTurn } from './agent.js';
 import { engineName } from '../tools/search/index.js';
+import { specs } from '../tools/registry.js';
 
 const COMMANDS = {
   '/help': 'list these commands',
   '/clear': 'start a new conversation, keeping the session',
   '/providers': 'show which providers are configured',
-  '/tokens': 'show what this conversation has cost so far',
+  '/tokens': 'show what this conversation costs per request',
+  '/compact': 'summarise the older half of the conversation now',
   '/allow': 'stop asking before running tools, for this session',
   '/exit': 'leave',
 };
@@ -72,10 +74,31 @@ export async function session(term, env, { allowAll }) {
             term.line(`  ${term.paint(c.name.padEnd(12), 'bold')} ${term.paint(`${c.model}  ${budget}`, 'grey')}${retired}`);
           }
           return true;
-        case '/tokens':
+        case '/tokens': {
+          const estimate = ctx.budget.estimate(conversation, specs());
+          const client = ctx.router.clients[0];
+          const limit = client ? ctx.budget.limitFor(client) : null;
           term.line(term.paint(
             `  ${conversation.length} messages over ${turns} turn${turns === 1 ? '' : 's'}`, 'grey'));
+          term.line(term.paint(
+            `  about ${estimate} tokens per request`
+            + `${limit === null ? ' (no limit reported)' : ` of ${limit} available`}`, 'grey'));
+          term.line(term.paint(
+            `  estimator correction ${ctx.estimator.correction.toFixed(2)}`
+            + ` after ${ctx.estimator.observations} response${ctx.estimator.observations === 1 ? '' : 's'}`, 'grey'));
           return true;
+        }
+        case '/compact': {
+          const outcome = await ctx.compactor.compact(conversation, { signal });
+          if (outcome.compacted) {
+            conversation = outcome.conversation;
+            term.line(term.paint(
+              `  summarised ${outcome.summarised} messages: ${outcome.before} -> ${outcome.after} tokens`, 'grey'));
+          } else {
+            term.line(term.paint(`  not compacted: ${outcome.reason}`, 'yellow'));
+          }
+          return true;
+        }
         case '/allow':
           for (const t of ['write', 'edit', 'bash']) ctx.policy.rememberAllow(t);
           term.line(term.paint('  tools will run without asking, for this session', 'grey'));
@@ -88,7 +111,8 @@ export async function session(term, env, { allowAll }) {
 
     conversation.user(line);
     turns++;
-    await runTurn(term, loop, conversation, { signal, router: ctx.router });
+    const outcome = await runTurn(term, loop, conversation, { signal, router: ctx.router });
+    conversation = outcome.conversation;
     return true;
   });
 

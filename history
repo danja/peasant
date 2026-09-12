@@ -3,3 +3,24 @@ What does math.js do? One sentence.
 Now add a subtract function to it.
 /tokens
 /exit
+Read src/mod1.js and tell me what it does.
+Now read src/mod2.js.
+Now src/mod3.js.
+Now src/mod4.js.
+/tokens
+/exit
+Read src/mod1.js.
+Now read src/mod2.js and src/mod3.js.
+Now read src/mod4.js and summarise all four.
+/tokens
+/exit
+Read src/mod1.js.
+Now read src/mod2.js and src/mod3.js.
+Now read src/mod4.js and summarise all four.
+/tokens
+/exit
+Read src/mod1.js.
+Now read src/mod2.js and src/mod3.js.
+Now read src/mod4.js and summarise all four.
+/tokens
+/exit

@@ -29,6 +29,10 @@ all fourteen probe checks on the target — an AMD Athlon II X4 640 at
 | 2026-09-12 | target, Athlon II X4 640 | x86-64-v1 | v18.20.8 | 14/14 pass |
 | 2026-09-12 | dev box, i7-3770 | x86-64-v2 | v25.2.1 | 14/14 pass |
 
+And the end-to-end answer, which is the one that counts: **an interactive
+`peasant` session runs on the target and Groq answers.** Fourteen passing probe
+checks are evidence; a working session is the claim.
+
 The checks: startup, TurboFan on a hot loop, irregexp codegen, zlib, brotli,
 OpenSSL SHA-256, AES-256-GCM, EC keygen, WebAssembly compile-and-call, Atomics
 over a SharedArrayBuffer, worker spawn, ICU, a live HTTPS fetch, and readline.
