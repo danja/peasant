@@ -28,7 +28,7 @@ export async function mcp(term, env, { signal } = {}) {
   }
 
   term.line(term.paint('servers', 'bold'));
-  const { clients, failed, tools } = await connectServers({
+  const { clients, failed, tools, alwaysAllow } = await connectServers({
     env, cwd, signal,
     onProgress: (m) => term.status(term.paint(`  ${m}...`, 'grey')),
   });
@@ -37,18 +37,23 @@ export async function mcp(term, env, { signal } = {}) {
   try {
     for (const client of clients) {
       const info = client.serverInfo;
-      term.line(`${term.paint(client.name.padEnd(14), 'bold')}`
+      // padEnd only pads; a name longer than the column runs into what
+      // follows, which is how "codebase-memory" and its version became one word.
+      term.line(`${term.paint(client.name.padEnd(14), 'bold')} `
         + term.paint(`${info?.name ?? 'unknown'} ${info?.version ?? ''} · ${client.tools.length} tools`, 'grey'));
       for (const tool of client.tools) {
         const adapted = tools.find((x) => x.description.includes(`[${client.name}]`)
           && x.name.endsWith(tool.name.toLowerCase().replace(/[^a-z0-9_]+/g, '_')));
-        const writes = adapted && adapted.mutates ? term.paint(' (asks first)', 'yellow') : '';
+        const permitted = adapted && alwaysAllow.includes(adapted.name);
+        const writes = adapted && adapted.mutates && !permitted
+          ? term.paint(' (asks first)', 'yellow')
+          : (permitted ? term.paint(' (alwaysAllow)', 'cyan') : '');
         term.line(term.paint(`  ${tool.name}`, 'cyan') + writes);
         if (tool.description) term.line(term.paint(`    ${firstLine(tool.description)}`, 'grey'));
       }
     }
     for (const f of failed) {
-      term.line(`${term.paint(f.name.padEnd(14), 'yellow')}${f.error}`);
+      term.line(`${term.paint(f.name.padEnd(14), 'yellow')} ${f.error}`);
     }
   } finally {
     await closeServers(clients);

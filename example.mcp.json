@@ -18,6 +18,27 @@
       "disabled": true
     },
 
+    "_codebase_memory_example": {
+      "_comment": [
+        "A real one, translated from a Claude Code configuration. See",
+        "docs/mcp.md for the translation table and a caveat about prebuilt",
+        "binaries on an old CPU.",
+        "",
+        "alwaysAllow names the server's OWN tool names, or \"*\" for all of",
+        "them. It is needed because most servers declare readOnlyHint on",
+        "nothing, so peasant treats everything as mutating and prompts before",
+        "every query. The write operations are deliberately left off."
+      ],
+      "command": "/absolute/path/to/codebase-memory-mcp",
+      "args": [],
+      "alwaysAllow": [
+        "search_graph", "query_graph", "trace_path", "get_code_snippet",
+        "get_architecture", "get_graph_schema", "search_code",
+        "list_projects", "index_status", "check_index_coverage"
+      ],
+      "disabled": true
+    },
+
     "_http_example": {
       "_comment": [
         "A remote server over Streamable HTTP. https is required unless the",

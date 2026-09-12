@@ -25,7 +25,8 @@ export async function connectServers({ env = process.env, cwd = process.cwd(), s
     }
   }
 
-  return { clients, failed, tools: adaptAll(clients) };
+  const { tools, alwaysAllow } = adaptAll(clients, { config: servers });
+  return { clients, failed, tools, alwaysAllow };
 }
 
 export async function closeServers(clients) {

@@ -148,7 +148,12 @@ what loaded.
 A server's tools become indistinguishable from built-in ones: same permission
 policy, same token accounting. Anything a server does not declare read-only is
 treated as mutating and asks before running, because `readOnlyHint` is optional
-in MCP and the cost of guessing wrong that way is one extra prompt.
+in MCP and the cost of guessing wrong that way is one extra prompt. Most servers
+declare it on nothing, so a server's block can list `alwaysAllow` for the tools
+you are happy to run unattended.
+
+`docs/mcp.md` has a worked example translating a real Claude Code configuration,
+including the table for `~/.claude.json` → peasant.
 
 Only tools are implemented. Resources and prompts are absent rather than
 half-present. See [`docs/mcp.md`](docs/mcp.md).

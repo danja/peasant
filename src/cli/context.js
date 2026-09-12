@@ -27,7 +27,6 @@ export async function build(term, env, { allowAll = false, signal, quiet = false
     term.error(term.paint(`  ${f.name} unavailable: ${f.error}`, 'yellow'));
   }
 
-  const policy = new Policy({ mode: allowAll ? 'allow' : (env.PEASANT_PERMISSION_MODE ?? 'ask') });
   const prompt = new Prompt({ terminal: term });
 
   const estimator = new TokenEstimator();
@@ -38,6 +37,7 @@ export async function build(term, env, { allowAll = false, signal, quiet = false
   // being broken is a normal Tuesday and must not stop peasant starting.
   let mcpClients = [];
   let mcpTools = [];
+  let mcpAlwaysAllow = [];
   if (mcp) {
     const result = await connectServers({
       env, cwd: root, signal,
@@ -46,10 +46,18 @@ export async function build(term, env, { allowAll = false, signal, quiet = false
     term.clearStatus();
     mcpClients = result.clients;
     mcpTools = result.tools;
+    mcpAlwaysAllow = result.alwaysAllow;
     for (const f of result.failed) {
       term.error(term.paint(`  mcp ${f.name}: ${f.error}`, 'yellow'));
     }
   }
+
+  const policy = new Policy({
+    mode: allowAll ? 'allow' : (env.PEASANT_PERMISSION_MODE ?? 'ask'),
+    // Only ever from a server's own configuration: a deliberate act by whoever
+    // set the server up, not an inference peasant makes.
+    allow: mcpAlwaysAllow,
+  });
 
   // Standing instructions from configuration, folded into the system prompt.
   // Everything here is resent on every turn, so its size is reported rather
@@ -60,7 +68,7 @@ export async function build(term, env, { allowAll = false, signal, quiet = false
   return {
     root, router, clients, failed, skipped, prefs, policy, prompt,
     estimator, budget, compactor,
-    mcpClients, mcpTools,
+    mcpClients, mcpTools, mcpAlwaysAllow,
     tools: [...TOOLS, ...mcpTools],
     contextFiles,
     context: renderContext(contextFiles.found),

@@ -207,7 +207,7 @@ test('anything not declared read-only is treated as mutating', () => {
 
 test('an adapted tool behaves exactly like a built-in one', async (t) => {
   const client = await stdioClient(t);
-  const [tool] = adaptAll([client]).filter((x) => x.name.endsWith('echo_text'));
+  const [tool] = adaptAll([client]).tools.filter((x) => x.name.endsWith('echo_text'));
 
   assert.equal(tool.mutates, false, 'declared read-only by the server');
   assert.match(tool.description, /^\[demo\]/, 'the server is named, so the model knows where it goes');
@@ -219,13 +219,13 @@ test('an adapted tool behaves exactly like a built-in one', async (t) => {
 
 test('an adapted tool validates its arguments against the server schema', async (t) => {
   const client = await stdioClient(t);
-  const [tool] = adaptAll([client]).filter((x) => x.name.endsWith('echo_text'));
+  const [tool] = adaptAll([client]).tools.filter((x) => x.name.endsWith('echo_text'));
   await assert.rejects(() => tool.invoke({}, {}), /text is required/);
 });
 
 test('a mutating server tool is marked as such', async (t) => {
   const client = await stdioClient(t);
-  const [tool] = adaptAll([client]).filter((x) => x.name.endsWith('write_thing'));
+  const [tool] = adaptAll([client]).tools.filter((x) => x.name.endsWith('write_thing'));
   assert.equal(tool.mutates, true, 'it says nothing about being read-only');
 });
 
@@ -235,9 +235,50 @@ test('colliding names are kept apart rather than overwriting', async (t) => {
   const a = await stdioClient(t);
   const b = await stdioClient(t);
   // Both clients are named 'demo', so every name collides.
-  const tools = adaptAll([a, b]);
+  const { tools } = adaptAll([a, b]);
   assert.equal(tools.length, 4);
   assert.equal(new Set(tools.map((x) => x.name)).size, 4);
+});
+
+test('alwaysAllow names a server\'s tools by the server\'s own names', async (t) => {
+  // Many servers declare readOnlyHint on none of their tools -- the real
+  // codebase-memory-mcp declares it on one of fifteen -- so peasant would
+  // prompt before every graph query: correct, and unusable. Naming them in
+  // configuration is a deliberate act by whoever set the server up.
+  const client = await stdioClient(t);
+  const config = new Map([['demo', { alwaysAllow: ['Write.Thing'] }]]);
+  const { tools, alwaysAllow } = adaptAll([client], { config });
+
+  assert.equal(alwaysAllow.length, 1);
+  const permitted = tools.find((x) => x.name === alwaysAllow[0]);
+  assert.ok(permitted.name.endsWith('write_thing'));
+  assert.equal(permitted.mutates, true, 'the tool is still honestly described as mutating');
+});
+
+test('alwaysAllow of "*" permits every tool from that server', async (t) => {
+  const client = await stdioClient(t);
+  const { alwaysAllow } = adaptAll([client], { config: new Map([['demo', { alwaysAllow: ['*'] }]]) });
+  assert.equal(alwaysAllow.length, 2);
+});
+
+test('alwaysAllow applies only to the server that declared it', async (t) => {
+  const client = await stdioClient(t);
+  const { alwaysAllow } = adaptAll([client], { config: new Map([['other', { alwaysAllow: ['*'] }]]) });
+  assert.deepEqual(alwaysAllow, []);
+});
+
+test('a permitted tool needs no prompt, and the policy is where that lives', async (t) => {
+  const { Policy, DECISION } = await import('../../src/permission/Policy.js');
+  const client = await stdioClient(t);
+  const { tools, alwaysAllow } = adaptAll([client], { config: new Map([['demo', { alwaysAllow: ['*'] }]]) });
+
+  const policy = new Policy({ mode: 'ask', allow: alwaysAllow });
+  for (const tool of tools) assert.equal(policy.decide(tool), DECISION.allow, tool.name);
+
+  // Without the configuration, the mutating one still asks.
+  const strict = new Policy({ mode: 'ask' });
+  const writer = tools.find((x) => x.mutates);
+  assert.equal(strict.decide(writer), DECISION.ask);
 });
 
 // --- connecting ------------------------------------------------------------

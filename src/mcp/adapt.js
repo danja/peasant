@@ -58,11 +58,21 @@ export function adaptTool(client, tool, { nameOverride = null } = {}) {
 // Two servers can offer tools whose names sanitise to the same thing, and a
 // silent overwrite would mean calls going to the wrong server -- which is very
 // hard to notice and very annoying to diagnose.
-export function adaptAll(clients) {
+//
+// Also returns the peasant names of tools a server's configuration marks
+// `alwaysAllow`. Many servers declare `readOnlyHint` on none of their tools --
+// codebase-memory-mcp declares it on one of fifteen -- so peasant prompts
+// before every graph query, which is correct and unusable. Naming them in
+// configuration is a deliberate act by the person running the server, which is
+// the right place for that decision.
+export function adaptAll(clients, { config = new Map() } = {}) {
   const tools = [];
+  const alwaysAllow = [];
   const taken = new Set();
 
   for (const client of clients) {
+    const allowed = new Set(config.get(client.name)?.alwaysAllow ?? []);
+
     for (const tool of client.tools) {
       let name = sanitise(client.name, tool.name);
       if (taken.has(name)) {
@@ -72,7 +82,10 @@ export function adaptAll(clients) {
       }
       taken.add(name);
       tools.push(adaptTool(client, tool, { nameOverride: name }));
+      // Matched on the server's own name, because that is what its
+      // documentation calls it.
+      if (allowed.has(tool.name) || allowed.has('*')) alwaysAllow.push(name);
     }
   }
-  return tools;
+  return { tools, alwaysAllow };
 }

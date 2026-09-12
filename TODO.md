@@ -136,6 +136,8 @@ profile fields exist.
 - [x] ~~Custom slash commands~~ — done, `.peasant/commands/*.md`.
 - [ ] Context files are read once at startup. Editing `PEASANT.md` mid-session
       has no effect until a restart, which will surprise someone.
+- [x] ~~Per-server `alwaysAllow`~~ — most servers declare `readOnlyHint` on
+      nothing, so without it every query prompts.
 - [ ] MCP resources and prompts. Deliberately absent for now rather than
       half-implemented; add them when something needs them.
 - [ ] MCP tools are fetched once at startup. A server sending
