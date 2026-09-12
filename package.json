@@ -1,0 +1,29 @@
+{
+  "name": "peasant",
+  "version": "0.0.0",
+  "description": "An LLM coding harness for the poor: no dependencies, old CPUs, free API tiers.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "peasant": "bin/peasant.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test \"tests/guard/**/*.test.js\" \"tests/unit/**/*.test.js\"",
+    "test:compat": "node --test \"tests/compat/**/*.test.js\"",
+    "test:live": "node --test \"tests/live/**/*.test.js\"",
+    "probe": "node bin/probe-runtime.js",
+    "probe:matrix": "./bin/probe-node-matrix.sh",
+    "probe:providers": "node bin/probe-providers.js"
+  },
+  "//dependencies": "Intentionally absent. tests/guard/no-runtime-deps.test.js fails if this changes.",
+  "//devDependencies": "Also absent: the test runner is node:test and the linter is node --check."
+}
