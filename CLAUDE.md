@@ -58,6 +58,10 @@ zero-dependency and no-native rules still matter, because they are what stop a
 
 ## Layout
 
+- `peasant` — a POSIX-sh launcher at the repository root, so `./peasant` and a
+  symlink from the PATH both work. It resolves its own location through symlinks
+  and **must never `cd`**: the working directory is the workspace, not the
+  installation. `tests/guard/launcher.test.js` holds it to that.
 - `bin/` — `peasant.js` (entry), `probe-runtime.js` (the CPU/runtime probe),
   `probe-node-matrix.sh` (the same probe across Node majors), `probe-providers.js`
 - `src/compat/` — `Preflight.js`, the startup capability check, sharing its checks with

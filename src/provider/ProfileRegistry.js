@@ -15,13 +15,14 @@ import nvidia from './profiles/nvidia.js';
 import together from './profiles/together.js';
 import ollama from './profiles/ollama.js';
 import llamacpp from './profiles/llamacpp.js';
+import anthropic from './profiles/anthropic.js';
 import claudeCode from './profiles/claude-code.js';
 import codex from './profiles/codex.js';
 import { readCredential } from './Credentials.js';
 
 export const PROFILES = Object.freeze([
   groq, mistral, cerebras, openrouter, google, huggingface,
-  nvidia, together, ollama, llamacpp, claudeCode, codex,
+  nvidia, together, ollama, llamacpp, anthropic, claudeCode, codex,
 ]);
 
 export const PROFILE_NAMES = Object.freeze(PROFILES.map((p) => p.name));

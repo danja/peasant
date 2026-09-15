@@ -11,10 +11,17 @@ import { preferences } from '../config/preferences.js';
 // The catalogue field naming a context window, where a provider publishes one.
 // OpenRouter and Ollama do; Groq, Mistral, Google and Hugging Face do not, so
 // null is the normal answer and must stay distinguishable from zero.
+//
+// One list, and it has to be complete: a provider that publishes a window under
+// a name missing from here reads as publishing none, and a null window means
+// limitFor() returns null, which means shouldCompact() is permanently false.
+// The conversation then grows until the provider refuses it. Anthropic's
+// `max_input_tokens` was exactly that case, found by inspecting a real
+// catalogue entry rather than by anything failing.
 function windowOf(details, model) {
   const entry = details.find((m) => (m.id ?? m.name) === model);
   if (!entry) return null;
-  for (const field of ['context_length', 'max_context_window_tokens', 'context_window', 'max_model_len']) {
+  for (const field of ['context_length', 'max_context_window_tokens', 'context_window', 'max_model_len', 'max_input_tokens']) {
     const v = entry[field];
     if (Number.isInteger(v) && v > 0) return v;
   }

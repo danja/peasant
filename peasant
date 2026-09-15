@@ -1,0 +1,52 @@
+#!/bin/sh
+# peasant -- launcher for a checkout.
+#
+# `node bin/peasant.js` works and is what the README showed; this exists so that
+# `./peasant` does too, and so that a symlink to it from somewhere on the PATH
+# works without npm link.
+#
+# Two things it must get right, and both are about where things are:
+#
+#   - **It resolves its own location, following symlinks.** The point of the
+#     script is to be reachable from elsewhere, so `$0` is routinely a link in
+#     ~/bin rather than this file. Resolving it is what lets the launcher find
+#     bin/peasant.js.
+#   - **It does not change the working directory.** peasant works on whatever
+#     directory it is started in -- the cwd is the workspace, not the
+#     installation -- so a `cd` here would silently make peasant edit its own
+#     source tree instead of the user's project. That is the whole reason this
+#     is four lines of resolution rather than one line of `cd`.
+#
+# Not in package.json's `files`, on purpose: an installed package already gets a
+# `peasant` command from the `bin` mapping, and shipping a second one would put
+# two things of the same name on the PATH. This is for running a checkout.
+#
+# POSIX sh, and deliberately not bash: the target is an old machine and this is
+# the one piece of peasant that runs before any of its own checks can.
+
+set -eu
+
+# Follow the symlink chain by hand. `readlink -f` would do it in one call but is
+# a GNU extension; this is the portable form and it is five lines.
+self=$0
+while [ -L "$self" ]; do
+    link=$(readlink "$self")
+    case $link in
+        /*) self=$link ;;
+        *)  self=$(dirname "$self")/$link ;;
+    esac
+done
+here=$(cd -- "$(dirname -- "$self")" && pwd)
+
+# The one message peasant cannot deliver through src/ui/Terminal.js, because
+# there is no runtime to load it with. No version number is quoted here on
+# purpose: the floor lives in package.json's `engines` field and is bound to
+# docs/runtime-baseline.md by a test, and a second copy in a shell script is
+# exactly the pair of files that drift apart without anything complaining.
+if ! command -v node >/dev/null 2>&1; then
+    echo "peasant: node is not on the PATH." >&2
+    echo "         Peasant needs the Node version named in \"engines\" in $here/package.json." >&2
+    exit 127
+fi
+
+exec node "$here/bin/peasant.js" "$@"

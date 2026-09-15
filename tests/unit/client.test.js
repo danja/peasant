@@ -338,3 +338,56 @@ test('a network failure is retryable, not a crash', async (t) => {
   assert.equal(err.retryable, true);
   assert.match(err.message, /request failed: fetch failed/);
 });
+
+// --- an account refusal wearing a 400 --------------------------------------
+
+function paidProfile(name) {
+  return defineProfile({
+    name,
+    baseUrl: 'https://fake.invalid/v1',
+    keyVar: 'FAKE_API_KEY', baseUrlVar: 'FAKE_BASE_URL', modelVar: 'FAKE_MODEL',
+    unavailableWhen: [/credit balance is too low/i],
+  });
+}
+
+test('a 400 a profile names as an account problem is not a bad request', async (t) => {
+  // Measured against Anthropic 2026-09-15: an unpaid account is refused with
+  // 400, not 402. Classified by status alone that is `bad-request`, which the
+  // router never retries anywhere -- so one provider's billing problem would
+  // stop the whole session, which is the outcome classify()'s own comment says
+  // helps nobody.
+  await withProvider(t, async (client, fake) => {
+    fake.respond({ status: 400, json: { error: { message: 'Your credit balance is too low to access the Anthropic API.' } } });
+    await assert.rejects(() => client.complete(ask), (e) => {
+      assert.equal(e.status, 400);
+      assert.equal(e.kind, 'provider-unavailable');
+      assert.ok(e.retryable, 'another provider would very likely answer');
+      assert.ok(e.permanent, 'and this one will not, for the rest of the session');
+      return true;
+    });
+  }, { profile: paidProfile('fake-paid') });
+});
+
+test('a 400 that is genuinely our fault stays a bad request', async (t) => {
+  // The other half, and the more important one: a pattern that matched too
+  // widely would stop the router rotating off a mistake of ours and burn every
+  // provider's quota repeating it.
+  await withProvider(t, async (client, fake) => {
+    fake.respond({ status: 400, json: { error: { message: 'messages.0.content: field required' } } });
+    await assert.rejects(() => client.complete(ask), (e) => {
+      assert.equal(e.kind, 'bad-request');
+      assert.ok(!e.retryable, 'every provider would refuse this equally');
+      return true;
+    });
+  }, { profile: paidProfile('fake-paid-2') });
+});
+
+test('a profile naming no account refusals classifies 400 as before', async (t) => {
+  await withProvider(t, async (client, fake) => {
+    fake.respond({ status: 400, json: { error: { message: 'Your credit balance is too low.' } } });
+    await assert.rejects(() => client.complete(ask), (e) => {
+      assert.equal(e.kind, 'bad-request');
+      return true;
+    });
+  });
+});

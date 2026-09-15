@@ -166,8 +166,9 @@ export class ProviderClient {
 
   #error(what, res, body) {
     let message = `${this.name}: ${what} (HTTP ${res.status})`;
+    let detail = null;
     try {
-      const detail = this.#dialect.errorDetail(JSON.parse(body));
+      detail = this.#dialect.errorDetail(JSON.parse(body));
       if (detail) message += `: ${detail}`;
     } catch { if (body) message += `: ${String(body).slice(0, 200)}`; }
 
@@ -176,8 +177,29 @@ export class ProviderClient {
       provider: this.name,
       headers: res.headers,
       body,
-      kind: classify(res.status),
+      kind: this.#classify(res.status, detail),
     });
+  }
+
+  // Status first, then the one thing a status cannot say.
+  //
+  // `classify` treats 400 as "our request is wrong and everyone will say so",
+  // which is right almost always and was measured to be wrong for at least one
+  // provider: Anthropic answers an *unpaid account* with 400 and
+  //
+  //   Your credit balance is too low to access the Anthropic API.
+  //
+  // That is the 402 case wearing a 400, and the comment on `classify` names the
+  // cost exactly -- "not rotating on one provider's billing problem takes the
+  // whole session down". A profile may therefore name the refusals that are
+  // really about the account rather than the request. Data in a profile, not a
+  // branch here, and empty for everyone who has not measured one.
+  #classify(status, detail) {
+    const kind = classify(status);
+    if (kind !== 'bad-request' || !detail) return kind;
+    return this.profile.unavailableWhen.some((re) => re.test(detail))
+      ? 'provider-unavailable'
+      : kind;
   }
 
   async #post(body, signal) {

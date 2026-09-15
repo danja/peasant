@@ -65,6 +65,13 @@ export const GENERIC = {
   // Extra headers, as a function of config so a profile can read env values.
   headers: () => ({}),
 
+  // Patterns that turn a 400 into "this provider will not serve us" rather than
+  // "our request is malformed". Only for a refusal that is about the account --
+  // billing, suspension, a region block -- and only when it has actually been
+  // seen, because a pattern matching too widely would stop the router rotating
+  // off a genuine mistake of ours and burn every provider's quota repeating it.
+  unavailableWhen: [],
+
   // Rate-limit header names. Every one is optional: a provider that publishes
   // nothing leaves the limiter to infer from 429s alone.
   rateLimit: {

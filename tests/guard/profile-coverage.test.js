@@ -98,7 +98,6 @@ test('no provider is named outside profiles/ and the registry', () => {
     path.join('bin', 'probe-providers.js'),
     path.join('bin', 'probe-tokens.js'),
   ];
-  const names = new RegExp(`\\b(${PROFILE_NAMES.join('|')})\\b`, 'i');
   const offenders = [];
 
   for (const file of listFiles()) {
@@ -107,11 +106,37 @@ test('no provider is named outside profiles/ and the registry', () => {
     // Import specifiers legitimately contain a provider name; statements do not.
     const { clean } = scanSource(fs.readFileSync(file, 'utf8'));
     const body = clean.replace(/^\s*(?:import|export)\b[^\n;]*;?$/gm, '');
-    const hit = names.exec(body);
-    if (hit) offenders.push(`${rel}: ${hit[0]}`);
+    const hit = namesIn(body)[0];
+    if (hit) offenders.push(`${rel}: ${hit}`);
   }
   assert.deepEqual(offenders, [],
     `provider names must not appear outside profiles/: ${offenders.join(', ')}`);
+});
+
+// Whole tokens, not substrings.
+//
+// `\banthropic\b` matched `anthropic-version` -- the Anthropic Messages
+// format's own header name, which `dialects/messages.js` has to send literally
+// and which is a fact about the *format*, not a branch on a provider. A
+// hyphenated compound is a different word from the name inside it, and
+// `claude-code` still matches itself exactly because it is compared whole.
+function namesIn(text) {
+  const wanted = new Set(PROFILE_NAMES.map((n) => n.toLowerCase()));
+  return (text.match(/[A-Za-z0-9_-]+/g) ?? []).filter((t) => wanted.has(t.toLowerCase()));
+}
+
+test('the provider-name scan still catches what it is for', () => {
+  // A guard that scrapes source needs its own test that the scraping works, or
+  // it goes blind rather than red -- CLAUDE.md, and scanner.test.js exists for
+  // exactly this reason one level down.
+  assert.deepEqual(namesIn('if (name === "groq") special();'), ['groq'],
+    'a bare provider name must still be caught');
+  assert.deepEqual(namesIn("headers['anthropic-version'] = v;"), [],
+    'a hyphenated compound is not a reference to the provider inside it');
+  assert.deepEqual(namesIn('const p = "claude-code";'), ['claude-code'],
+    'a hyphenated provider name must still match itself');
+  assert.deepEqual(namesIn('const groqClient = 1;'), [],
+    'a longer identifier is not the name');
 });
 
 test('the scan found profiles to check', () => {

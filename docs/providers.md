@@ -334,6 +334,65 @@ only option that works with no network at all.
 - Whether Mistral's `limit: 0` was exhaustion from the probe or an account
   state. It reported 125/625,000 that morning.
 
+## Anthropic, with an API key
+
+Added 2026-09-15, and the only part of this section that is *measured* rather
+than documented. A live key was available; it had **no credit balance**, so
+everything free could be exercised and nothing billable could.
+
+### What answered
+
+| Request | Result |
+|---|---|
+| `GET /v1/models` with `x-api-key` | **200**, 11 models |
+| `GET /v1/models` with `Authorization: Bearer` | **200**, 11 models |
+| `GET /v1/models` with `Bearer` + `anthropic-beta: oauth-2025-04-20` | **200**, 11 models |
+| `GET /v1/models` with `Bearer`, no `anthropic-version` | **400** — `anthropic-version: header is required` |
+| `POST /v1/messages` | **400** — `Your credit balance is too low...` |
+
+Row two matters for the code: peasant's client only speaks
+`Authorization: Bearer`, and that is enough here. No `x-api-key` auth scheme was
+needed.
+
+### Two findings worth more than the profile
+
+**The catalogue publishes `max_input_tokens`, and `connect.js` did not know the
+name.** Entries carry `max_input_tokens` (1,000,000 on Sonnet 5) and `max_tokens`
+(128,000), alongside a `capabilities` object. `windowOf()` checked four other
+field names and would have returned null — and a null window means `limitFor()`
+returns null, which means `shouldCompact()` is permanently false and the
+conversation grows until the provider refuses it. Found by printing a real
+catalogue entry, not by anything failing. The field list is one list and it has
+to be complete.
+
+**An unpaid account is refused with 400, not 402.**
+
+```json
+{"type":"error","error":{"type":"invalid_request_error",
+ "message":"Your credit balance is too low to access the Anthropic API..."}}
+```
+
+`classify()` maps 400 to `bad-request` on the documented reasoning that "400
+means our request is wrong and everyone will say so" — and that reasoning is
+right almost always. Here it is the 402 case wearing a 400, and the comment on
+`classify()` names the cost exactly: *"not rotating on one provider's billing
+problem takes the whole session down."* A profile may now name the refusals that
+are about the account rather than the request, via `unavailableWhen`, which is
+data in `profiles/` rather than a branch in the client. Anthropic's list is one
+narrow pattern; everyone else's is empty.
+
+### Not measured
+
+**No `*-ratelimit-*` header appeared on any response obtained.** So the profile
+names none, and the budget is discovered from 429s alone as it is for five of the
+six hosted providers. Header names copied out of documentation would be exactly
+the guess this project refuses — `RateLimiter` would watch for headers that may
+never arrive and report a budget nobody measured.
+
+The model preferences *are* measured, from the 11-entry catalogue: Sonnet 5
+first, deliberately not the largest model available, because this bills per token
+and a harness makes hundreds of small tool-calling turns.
+
 ## Subscription endpoints — Claude Code and Codex
 
 Added 2026-09-15. **Nothing in this section has been measured**, and that is the

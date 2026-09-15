@@ -39,8 +39,8 @@ git clone https://github.com/danja/peasant && cd peasant
 mkdir -p ~/.config/peasant && cp example.env ~/.config/peasant/.env
 $EDITOR ~/.config/peasant/.env        # add one key; Groq and Mistral are free
 
-node bin/peasant.js doctor            # what it found and what it will use
-node bin/peasant.js                   # an interactive session
+./peasant doctor                      # what it found and what it will use
+./peasant                             # an interactive session
 ```
 
 Keys belong in `~/.config/peasant/.env`, not in the project you are working on —
@@ -55,15 +55,21 @@ set up per project:
 
 ```sh
 cd ~/some/other/repo
-node /path/to/peasant/bin/peasant.js
+/path/to/peasant/peasant
 ```
 
-For a shorter command, `peasant` is declared as a bin, so either of these works:
+The launcher resolves its own location and leaves the working directory alone,
+so the directory you run it *from* is the one it works on. That also means a
+symlink is enough to put it on the PATH — it follows the link back to the
+checkout:
 
 ```sh
-cd /path/to/peasant && npm link                      # puts `peasant` on PATH
-alias peasant='node /path/to/peasant/bin/peasant.js' # or just this
+ln -s /path/to/peasant/peasant ~/.local/bin/peasant   # then just: peasant
 ```
+
+`cd /path/to/peasant && npm link` also works, since `peasant` is declared as a
+bin. `node /path/to/peasant/bin/peasant.js` remains the same thing with nothing
+in front of it.
 
 **Check what a repository costs you before settling in.** `peasant doctor` in
 that directory reports the fixed per-turn cost, which includes any context file
@@ -103,19 +109,19 @@ function is one turn rather than eight.
 
 ## Providers
 
-Twelve profiles. Ten speak the OpenAI chat-completions shape: Groq, Mistral,
+Thirteen profiles. Ten speak the OpenAI chat-completions shape: Groq, Mistral,
 Cerebras, OpenRouter, Google AI Studio, Hugging Face, NVIDIA, Together, and
 local Ollama and llama.cpp. Anything else speaking that shape works too; adding
 one is a file.
 
-Two do not, and they are different in kind. `claude-code` speaks the Anthropic
-Messages format and `codex` speaks the OpenAI Responses format, and both
-authenticate by borrowing the OAuth token that Claude Code or the Codex CLI has
-already stored on this machine — a subscription rather than a free tier. Neither
-is enabled unless you name it in `PEASANT_PROVIDERS`, both are **unverified**
-against their real endpoints, and using a subscription credential from a
-third-party client is outside what Anthropic's and OpenAI's terms permit. Read
-the block in `example.env` before turning either on.
+Three do not. `anthropic` speaks the Anthropic Messages format with an ordinary
+API key; `claude-code` reaches the same endpoint by borrowing the OAuth token
+Claude Code stores on this machine; `codex` speaks the OpenAI Responses format
+with the Codex CLI's token. None of the three is enabled unless you name it in
+`PEASANT_PROVIDERS`, because none of them is free — the first bills per token,
+and the other two spend a subscription, which is also outside what Anthropic's
+and OpenAI's terms permit for a third-party client. All three are **unverified**
+for inference. Read the blocks in `example.env` before turning any on.
 
 **Providers rotate automatically.** They are tried in `PEASANT_PROVIDERS` order
 and peasant moves on when the current one is rate limited, unavailable or

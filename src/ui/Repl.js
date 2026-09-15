@@ -56,6 +56,7 @@ export class Repl {
 
   get busy() { return this.#busy; }
 
+
   // `handle(line, { signal })` does the work. It is given an AbortSignal that
   // fires when the user interrupts, so a long stream stops where it is.
   // Returning false ends the session.

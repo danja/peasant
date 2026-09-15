@@ -2,6 +2,94 @@
 
 Newest first. What happened, the root cause, and what now prevents it.
 
+## 2026-09-15 — The permission prompt echoed every keypress twice
+
+**What happened.** Answering `allow? [y]es / [n]o / [a]lways:` with `y` printed
+`yy`. Reported by the user; nothing in the suite covered it, because nothing in
+the suite covered `Prompt.ask` at all.
+
+**Root cause.** Not the question and not the answer — *where* it was asked.
+`Prompt.#question` opened its own readline interface on `process.stdin`:
+
+```js
+const rl = readline.createInterface({ input: this.#input, output: process.stdout, terminal: true });
+```
+
+The REPL's interface owns the terminal for the whole session and is **still
+attached while a turn is running**, which is exactly when permission is asked.
+Two interfaces on one stdin means two keypress listeners, and both echo.
+Measured:
+
+```
+before          data=0 keypress=0
+one interface   data=1 keypress=1
+two interfaces  data=1 keypress=2    <- both echo
+after closing   data=1 keypress=0
+```
+
+Note `data` goes to one and stays there for the life of the stream, because
+`emitKeypressEvents` never removes it. Only `keypress` moves, so only `keypress`
+can be asserted on — a test written against the obvious count would have failed
+for a reason that was not the bug.
+
+**Prevention.** The prompt stopped using readline at all. It reads one keypress
+from the raw stream with readline's keypress listeners detached for the
+duration and restored afterwards, so there is no second interface to be a second
+listener.
+
+The first fix was narrower — lending the prompt the REPL's own interface — and
+it worked, but it was replaced within the hour when the prompt became
+single-keypress, and the replacement turned up a **second** bug the first
+approach would have left in place. Pausing readline (`rl.pause()`), the obvious
+way to get it out of the way, does not stop it handling the key: it echoed the
+answer *and* kept it in its line buffer, so answering `y` turned the user's next
+input `second` into `secondy`. Detaching is the only one of the three
+approaches that leaves the next line clean. Measured:
+
+| approach | echo | next line |
+|---|---|---|
+| second interface | `yy` | clean |
+| `rl.pause()` | `y` | **`secondy`** |
+| detach listeners | none (we write it) | clean |
+
+`tests/unit/permission-prompt.test.js` covers the path that had none: that a
+keypress listener already on stdin never sees the answer, that the listeners are
+restored exactly as found, that raw mode is put back, and that a key meaning
+nothing is ignored rather than taken as a refusal.
+
+**What would have caught it earlier.** Any test of `ask()`. The prompt was
+written, reviewed and shipped without one because it needs a TTY, and the
+reflex was to leave it alone rather than reach for a pty. An A/B under `script`
+took two minutes once attempted.
+
+## 2026-09-15 — Wrote "read off a real response" above header names I had guessed
+
+**What happened.** Writing the `anthropic` profile I filled in a `rateLimit`
+block of six `anthropic-ratelimit-*` header names from memory and captioned it:
+
+```js
+// Header names read off a real response; see docs/providers.md.
+```
+
+No response had been read. The caption was written in the same keystrokes as the
+guess. The comment under it then described the reset format as "RFC 3339
+timestamps" while the field said `resetFormat: 'epoch-seconds'` — two
+descriptions of a thing I had not looked at, disagreeing with each other, which
+is what finally made me stop.
+
+**Root cause.** Exactly what CLAUDE.md means by "prose is a claim, and nothing
+tests sentences". A profile's header names are the one thing in it that cannot
+be guessed — `RateLimiter` would watch for headers that never arrive and report
+a budget nobody measured — and the caption made the guess look sourced.
+
+**Prevention.** Measured instead: **no `*-ratelimit-*` header appeared on any
+response obtained**, so the profile now names none and says why, and the budget
+is discovered from 429s as it is for five of the six hosted providers. Caught in
+the same session, before the profile was registered, and only because the two
+sentences contradicted each other. Nothing structural would have caught it — a
+plausible header name that is simply wrong looks exactly like a correct one, and
+the failure is silent.
+
 ## 2026-09-15 — A field renamed in one file, still read by name in another
 
 **What happened.** Adding the Anthropic Messages format meant a new profile

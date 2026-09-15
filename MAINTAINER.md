@@ -7,6 +7,35 @@ changes the other.
 
 Kept current at the end of any session that changes it.
 
+## Anthropic API key — needs credit before it can do anything
+
+Added as the `anthropic` profile 2026-09-15, and your `.env` now points at it.
+Two things were wrong with the configuration and both are fixed: the provider
+list said `claude`, which is not a profile name and made peasant refuse to start
+at all, and the key was under `CLAUDE_API_KEY`, which nothing reads. It is now
+`ANTHROPIC_API_KEY` and the list says `anthropic`. Nothing else in the file was
+touched, and the backup was deleted rather than left sitting full of keys.
+
+- [ ] **Buy credit, or the profile cannot be used.** `/v1/models` works — it is
+      free, which is why model selection resolves `claude-sonnet-5` — but
+      `POST /v1/messages` answers:
+
+          400  Your credit balance is too low to access the Anthropic API.
+
+      Until that is resolved no completion can be made, so the Messages dialect
+      stays unverified against the real service and `verified: false` stands.
+- [ ] **Decide whether you actually want it in the rotation.** It is first in
+      `PEASANT_PROVIDERS`, so once credit exists **every turn bills you** before
+      any free tier is tried. Every other provider in that list is free. Moving
+      `anthropic` to the end makes it the fallback when the free tiers are
+      exhausted, which is probably what you want from a project built on free
+      tiers; leaving it first makes peasant a paid harness with free fallbacks.
+      Your call, but it should be a decision rather than an accident of ordering.
+- [ ] **Capture the rate-limit headers once a request succeeds.** None of the
+      responses obtained carried a single `*-ratelimit-*` header, so the profile
+      names none and the budget is discovered from 429s alone. A paid response
+      would let that be measured properly.
+
 ## Blocking the two new providers
 
 `claude-code` and `codex` were added 2026-09-15 and **cannot be trusted until
