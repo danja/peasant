@@ -32,7 +32,12 @@ export async function providers(term, env, { signal } = {}) {
   }
   for (const f of failed) term.line(`${term.paint(f.name.padEnd(12), 'yellow')} ${f.error}`);
   for (const s of skipped) {
-    term.line(`${term.paint(s.name.padEnd(12), 'grey')} ${term.paint(`no key (${s.profile.keyVar})`, 'grey')}`);
+    // A provider whose credential could not be read says why and names the
+    // remedy. "no key (CLAUDE_CODE_OAUTH_TOKEN)" is a true sentence and a
+    // useless one when the real answer is that another tool has not been signed
+    // into -- and the variable it names is the override, not the usual route.
+    const why = s.problem ?? `no key (${s.profile.keyVar})`;
+    term.line(`${term.paint(s.name.padEnd(12), 'grey')} ${term.paint(why, 'grey')}`);
   }
   return 0;
 }

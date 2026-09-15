@@ -66,4 +66,4 @@ no build from source, no special baseline.
 
 Nothing about the runtime. The open questions here are the terminal capability
 survey (R5 — `TERM`, colour depth, unicode width, raw mode) and whether `grep`
-should use the system `rg`; both are in [`danja-todo.md`](danja-todo.md).
+should use the system `rg`; both are in [`../MAINTAINER.md`](../MAINTAINER.md).

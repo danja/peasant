@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { OpenAICompatClient, ProviderError } from '../../src/provider/OpenAICompatClient.js';
+import { ProviderClient, ProviderError } from '../../src/provider/Client.js';
 import { defineProfile } from '../../src/provider/profiles/generic.js';
 import groq from '../../src/provider/profiles/groq.js';
 import { FakeProvider, textChunks, defaultCompletion } from './lib/FakeProvider.js';
@@ -21,7 +21,7 @@ const testProfile = defineProfile({
 async function withProvider(t, fn, { profile = testProfile, model = 'test-model' } = {}) {
   const fake = await new FakeProvider().start();
   t.after(() => fake.stop());
-  const client = new OpenAICompatClient({
+  const client = new ProviderClient({
     profile, name: profile.name, key: 'test-key',
     baseUrl: fake.baseUrl, model, extraHeaders: {},
   });
@@ -34,14 +34,14 @@ const ask = { messages: [{ role: 'user', content: 'hi' }] };
 
 test('refuses to send a key over plaintext to a remote host', () => {
   assert.throws(
-    () => new OpenAICompatClient({ profile: testProfile, name: 'x', key: 'k', baseUrl: 'http://example.com/v1', extraHeaders: {} }),
+    () => new ProviderClient({ profile: testProfile, name: 'x', key: 'k', baseUrl: 'http://example.com/v1', extraHeaders: {} }),
     /refusing to send an API key over http/,
   );
 });
 
 test('allows plaintext to loopback, for a local model', () => {
   for (const host of ['127.0.0.1:11434', 'localhost:8080', '[::1]:8080']) {
-    assert.doesNotThrow(() => new OpenAICompatClient({
+    assert.doesNotThrow(() => new ProviderClient({
       profile: testProfile, name: 'x', key: '', baseUrl: `http://${host}/v1`, extraHeaders: {},
     }));
   }
@@ -61,7 +61,7 @@ test('sends bearer auth and the configured model', async (t) => {
 test('sends extra headers a profile supplies', async (t) => {
   const fake = await new FakeProvider().start();
   t.after(() => fake.stop());
-  const client = new OpenAICompatClient({
+  const client = new ProviderClient({
     profile: testProfile, name: 'fake', key: 'k', baseUrl: fake.baseUrl,
     model: 'm', extraHeaders: { 'x-title': 'peasant' },
   });
@@ -127,7 +127,7 @@ test('streams text and ends with a done event carrying the whole result', async 
 test('lists models', async (t) => {
   const fake = await new FakeProvider({ models: ['a', 'b'] }).start();
   t.after(() => fake.stop());
-  const client = new OpenAICompatClient({
+  const client = new ProviderClient({
     profile: testProfile, name: 'fake', key: 'k', baseUrl: fake.baseUrl, model: 'a', extraHeaders: {},
   });
   assert.deepEqual(await client.listModels(), ['a', 'b']);
@@ -138,7 +138,7 @@ test('lists models', async (t) => {
 test('replays the captured Groq tool stream end to end', async (t) => {
   const fake = await new FakeProvider().start();
   t.after(() => fake.stop());
-  const client = new OpenAICompatClient({
+  const client = new ProviderClient({
     profile: groq, name: 'groq', key: 'k', baseUrl: fake.baseUrl, model: 'm', extraHeaders: {},
   });
   fake.respond({ sse: readCapture('groq-tools.sse') });
@@ -159,7 +159,7 @@ test('keeps Groq reasoning out of assistant content, but still counts it', async
   // the budgeter wrong by an order of magnitude.
   const fake = await new FakeProvider().start();
   t.after(() => fake.stop());
-  const client = new OpenAICompatClient({
+  const client = new ProviderClient({
     profile: groq, name: 'groq', key: 'k', baseUrl: fake.baseUrl, model: 'm', extraHeaders: {},
   });
   fake.respond({ sse: readCapture('groq-tools.sse') });
@@ -177,7 +177,7 @@ test('keeps Groq reasoning out of assistant content, but still counts it', async
 test('replays the captured Mistral stream', async (t) => {
   const fake = await new FakeProvider().start();
   t.after(() => fake.stop());
-  const client = new OpenAICompatClient({
+  const client = new ProviderClient({
     profile: testProfile, name: 'fake', key: 'k', baseUrl: fake.baseUrl, model: 'm', extraHeaders: {},
   });
   fake.respond({ sse: readCapture('mistral-stream.sse') });
@@ -329,7 +329,7 @@ test('an abort stops the stream and propagates', async (t) => {
 });
 
 test('a network failure is retryable, not a crash', async (t) => {
-  const client = new OpenAICompatClient(
+  const client = new ProviderClient(
     { profile: testProfile, name: 'fake', key: 'k', baseUrl: 'https://fake.invalid/v1', model: 'm', extraHeaders: {} },
     { fetch: () => Promise.reject(new TypeError('fetch failed')) },
   );

@@ -10,6 +10,8 @@
 
 import http from 'node:http';
 
+const COMPLETION_PATHS = ['/chat/completions', '/messages', '/responses'];
+
 export class FakeProvider {
   #server;
   #port;
@@ -62,7 +64,10 @@ export class FakeProvider {
       return json(res, 200, {}, { object: 'list', data: this.models.map((id) => ({ id, object: 'model' })) });
     }
 
-    if (!req.url.endsWith('/chat/completions')) {
+    // The three completion paths the three dialects post to. Anything else is
+    // a 404, so a dialect posting to the wrong path fails loudly here rather
+    // than being quietly answered.
+    if (!COMPLETION_PATHS.some((suffix) => req.url.endsWith(suffix))) {
       return json(res, 404, {}, { error: { message: 'not found' } });
     }
 
@@ -100,6 +105,15 @@ function readBody(req) {
 }
 
 function safeJson(s) { try { return JSON.parse(s); } catch { return null; } }
+
+// SSE with a named `event:` line per frame, which is how both the Anthropic
+// Messages and the OpenAI Responses streams are framed. The chat-completions
+// stream is the odd one out in having no event names and a [DONE] terminator,
+// which is why frameChunks and this are two functions rather than one with a
+// flag.
+export function frameEvents(events) {
+  return events.map(({ event, data }) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`).join('');
+}
 
 export function frameChunks(chunks) {
   return [...chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`), 'data: [DONE]\n\n'].join('');

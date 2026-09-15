@@ -2,6 +2,36 @@
 
 Newest first. What happened, the root cause, and what now prevents it.
 
+## 2026-09-15 — A field renamed in one file, still read by name in another
+
+**What happened.** Adding the Anthropic Messages format meant a new profile
+field for the format's version. It was written as `anthropicVersion` in
+`dialects/messages.js` and, minutes later, declared as `apiVersion` in
+`profiles/generic.js` — the better name, because the field is not Anthropic's.
+The declaration was renamed; the reader was not.
+
+```js
+headers: (ctx) => ({ 'anthropic-version': ctx.profile.anthropicVersion }),
+```
+
+The header went out as the string `undefined`. Nothing failed locally, because
+nothing local checks a header value.
+
+**Root cause.** Exactly the failure CLAUDE.md's recurring-failure table is for:
+two files that had to agree, with nothing structural connecting them. Renaming a
+field is a two-file change that looks like a one-file change.
+
+**Prevention.** Caught by `tests/unit/dialects.test.js`, which asserts the
+version header actually arrives at the fake server — written in the same session
+but, importantly, written *before* the code was trusted rather than after it
+broke. The dialect now also throws when a profile using that format declares no
+version, so the value can be absent in exactly one place and it says so by name.
+The row is in CLAUDE.md's table.
+
+**What would have caught it earlier.** Nothing, and that is the point: a guard
+that greps for reads of undeclared profile fields would be the structural fix,
+and is worth writing if this happens a second time.
+
 ## 2026-09-12 — A fixed delay standing in for a real signal
 
 **What happened.** `StdioTransport.start()` waited fifty milliseconds after

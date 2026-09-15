@@ -10,7 +10,7 @@
 // user has seen it, and silently restarting somewhere else would duplicate or
 // contradict what is already on screen. After that point an error propagates.
 
-import { ProviderError } from './OpenAICompatClient.js';
+import { ProviderError } from './Client.js';
 import { DEFAULTS } from '../config/preferences.js';
 
 const sleep = (ms, signal) => new Promise((resolve, reject) => {
@@ -194,7 +194,7 @@ export class Router {
     }
   }
 
-  // Yields the same events as OpenAICompatClient.stream, plus a leading
+  // Yields the same events as ProviderClient.stream, plus a leading
   // { type: 'provider', name } so a caller can say who answered.
   //
   // Failover happens before the first token only -- see the note at the top.

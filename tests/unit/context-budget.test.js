@@ -5,7 +5,7 @@ import { Compactor } from '../../src/agent/Compactor.js';
 import { Conversation } from '../../src/agent/Conversation.js';
 import { TokenEstimator } from '../../src/agent/TokenEstimator.js';
 import { Router } from '../../src/provider/Router.js';
-import { OpenAICompatClient } from '../../src/provider/OpenAICompatClient.js';
+import { ProviderClient } from '../../src/provider/Client.js';
 import { defineProfile } from '../../src/provider/profiles/generic.js';
 import { FakeProvider, frameChunks } from './lib/FakeProvider.js';
 
@@ -21,7 +21,7 @@ const profile = defineProfile({
 });
 
 function clientWith({ limitTokens = null, contextWindow = null } = {}) {
-  const c = new OpenAICompatClient({
+  const c = new ProviderClient({
     profile, name: 'fake', key: 'k', baseUrl: 'https://fake.invalid/v1',
     model: 'm', extraHeaders: {}, contextWindow,
   });
@@ -145,7 +145,7 @@ test('split respects the tool-call unit when choosing where to cut', () => {
 async function compactorWith(t, summary) {
   const fake = await new FakeProvider().start();
   t.after(() => fake.stop());
-  const client = new OpenAICompatClient({
+  const client = new ProviderClient({
     profile, name: 'fake', key: 'k', baseUrl: fake.baseUrl, model: 'm', extraHeaders: {},
   });
   const router = new Router([client], { sleep: async () => {} });
@@ -254,7 +254,7 @@ test('a failed summary leaves the conversation alone rather than losing it', asy
   // Not compacting is a worse conversation; losing it is a worse afternoon.
   const fake = await new FakeProvider().start();
   t.after(() => fake.stop());
-  const client = new OpenAICompatClient({
+  const client = new ProviderClient({
     profile, name: 'fake', key: 'k', baseUrl: fake.baseUrl, model: 'm', extraHeaders: {},
   });
   const compactor = new Compactor({

@@ -63,6 +63,20 @@ export const DEFAULTS = Object.freeze({
   // failure.
   keepRecent: 6,
 
+  // Ceiling on one response, in tokens.
+  //
+  // Not a rate limit and not a context window -- those are discovered, never
+  // written down. This is a choice: how much output peasant is willing to ask
+  // for in a single turn. It exists because the Anthropic Messages format
+  // *requires* an explicit ceiling and has no server-side default to fall back
+  // on, so without a value here that format cannot send a request at all.
+  //
+  // Eight thousand is about the size of a substantial file rewrite, and small
+  // enough that a model which starts rambling is cut off while it is still
+  // cheap. Formats that do not require it are not sent it, so raising this
+  // changes nothing for the providers that were here first.
+  maxOutputTokens: 8_000,
+
   // How many sessions to keep. They are small -- a long one is tens of
   // kilobytes -- but nothing was removing them, and an unbounded directory of
   // transcripts is a slow leak and a growing pile of whatever the workspace
@@ -79,6 +93,7 @@ const ENV_KEYS = Object.freeze({
   compactAt: 'PEASANT_COMPACT_AT',
   maxTurns: 'PEASANT_MAX_TURNS',
   keepRecent: 'PEASANT_KEEP_RECENT',
+  maxOutputTokens: 'PEASANT_MAX_OUTPUT_TOKENS',
   keepSessions: 'PEASANT_KEEP_SESSIONS',
 });
 
@@ -121,6 +136,7 @@ export function preferences(env = {}) {
   set('compactAt', (r, n) => readNumber(r, n, { min: 0.1, max: 0.95, integer: false }));
   set('maxTurns', (r, n) => readNumber(r, n, { min: 1, max: 200, integer: true }));
   set('keepRecent', (r, n) => readNumber(r, n, { min: 2, max: 50, integer: true }));
+  set('maxOutputTokens', (r, n) => readNumber(r, n, { min: 256, max: 200_000, integer: true }));
   set('keepSessions', (r, n) => readNumber(r, n, { min: 1, max: 100_000, integer: true }));
 
   return Object.freeze(out);

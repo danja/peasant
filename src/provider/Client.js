@@ -9,6 +9,7 @@
 // and therefore fewer tests, so it must not be where the harness normally lives.
 
 import { SseParser, parseData, DONE } from './SseParser.js';
+import { byName as dialectByName } from './dialects/index.js';
 import { ToolCallAssembler } from './ToolCallAssembler.js';
 import { RateLimiter } from './RateLimiter.js';
 
@@ -66,10 +67,11 @@ export function classify(status) {
   return 'bad-request';
 }
 
-export class OpenAICompatClient {
+export class ProviderClient {
   #config;
   #limiter;
   #fetch;
+  #dialect;
 
   // `config` is what ProfileRegistry.configure() returns.
   constructor(config, { fetch: fetchImpl = globalThis.fetch, now = () => Date.now() } = {}) {
@@ -77,6 +79,10 @@ export class OpenAICompatClient {
     this.#config = config;
     this.#fetch = fetchImpl;
     this.#limiter = new RateLimiter(config.profile, { now });
+    // The wire format, chosen by the profile. Everything below this line is
+    // transport, budget and failure classification -- none of which differ
+    // between formats, which is why there is still only one client.
+    this.#dialect = dialectByName(config.profile.dialect);
   }
 
   get name() { return this.#config.name; }
@@ -87,6 +93,7 @@ export class OpenAICompatClient {
   get contextWindow() { return this.#config.contextWindow ?? null; }
   get profile() { return this.#config.profile; }
   get limiter() { return this.#limiter; }
+  get dialect() { return this.#dialect; }
 
   #headers() {
     const { profile, key, extraHeaders } = this.#config;
@@ -95,61 +102,72 @@ export class OpenAICompatClient {
       authorization: `Bearer ${key}`,
       'content-type': 'application/json',
       accept: 'application/json',
+      ...this.#dialect.headers({ profile }),
       ...extraHeaders,
     };
   }
 
-  #body({ messages, model, tools, toolChoice, maxTokens, temperature, stream }) {
-    const body = {
-      model: model ?? this.#config.model,
-      messages,
-      ...(maxTokens === undefined ? {} : { max_tokens: maxTokens }),
-      ...(temperature === undefined ? {} : { temperature }),
-    };
-    if (!body.model) {
+  #body(request) {
+    const model = request.model ?? this.#config.model;
+    if (!model) {
       throw new Error(`${this.name}: no model chosen. Set ${this.profile.modelVar} or pass one.`);
     }
-    if (tools?.length) {
-      body.tools = tools;
-      body.tool_choice = toolChoice ?? 'auto';
+
+    // A format that will not accept a request without an output ceiling gets
+    // one from preferences, never from a number written here. No inline
+    // fallback: if neither the caller nor the configuration supplies it, that
+    // is a misconfiguration to name rather than to paper over.
+    let maxTokens = request.maxTokens;
+    if (this.#dialect.requiresMaxTokens && maxTokens === undefined) {
+      maxTokens = this.#config.maxOutputTokens;
+      if (!maxTokens) {
+        throw new Error(
+          `${this.name}: the ${this.#dialect.name} format requires an output limit, and none is set. ` +
+          'Set PEASANT_MAX_OUTPUT_TOKENS (see example.env).',
+        );
+      }
     }
-    if (stream) {
-      body.stream = true;
-      // Without this a streamed response reports no token count and the
-      // budgeter is blind. Both measured providers honour it.
-      if (this.profile.includeUsage) body.stream_options = { include_usage: true };
-    }
-    return body;
+
+    return this.#dialect.buildBody({ ...request, model, maxTokens }, { profile: this.profile });
   }
 
   async listModels({ signal } = {}) {
-    const res = await this.#fetch(`${this.#config.baseUrl}/models`, {
+    const details = await this.listModelDetails({ signal });
+    return details.map((m) => m.id ?? m.name).filter(Boolean);
+  }
+
+  // The full catalogue entries, for the fields beyond the id. Kept separate
+  // from listModels so the common case stays a list of strings.
+  //
+  // Not every endpoint publishes a catalogue. Where none exists the profile
+  // carries the list instead -- which is a worse source, because it goes stale
+  // silently, and is why `models` is empty for every provider that can be
+  // asked.
+  async listModelDetails({ signal } = {}) {
+    if (this.#dialect.modelsPath === null) {
+      if (this.profile.models.length === 0) {
+        throw new Error(
+          `${this.name}: publishes no model catalogue and its profile lists none. ` +
+          `Set ${this.profile.modelVar} to the model to use.`,
+        );
+      }
+      return this.profile.models.map((m) => (typeof m === 'string' ? { id: m } : m));
+    }
+
+    const res = await this.#fetch(`${this.#config.baseUrl}${this.#dialect.modelsPath}`, {
       headers: this.#headers(),
       signal,
     });
     this.#limiter.observe(res.headers);
     const text = await res.text();
     if (!res.ok) throw this.#error('listing models failed', res, text);
-    const parsed = JSON.parse(text);
-    return (parsed.data ?? parsed.models ?? []).map((m) => m.id ?? m.name).filter(Boolean);
-  }
-
-  // The full catalogue entries, for the fields beyond the id. Kept separate
-  // from listModels so the common case stays a list of strings.
-  async listModelDetails({ signal } = {}) {
-    const res = await this.#fetch(`${this.#config.baseUrl}/models`, { headers: this.#headers(), signal });
-    this.#limiter.observe(res.headers);
-    const text = await res.text();
-    if (!res.ok) throw this.#error('listing models failed', res, text);
-    const parsed = JSON.parse(text);
-    return parsed.data ?? parsed.models ?? [];
+    return this.#dialect.parseModels(JSON.parse(text));
   }
 
   #error(what, res, body) {
     let message = `${this.name}: ${what} (HTTP ${res.status})`;
     try {
-      const parsed = JSON.parse(body);
-      const detail = parsed?.error?.message ?? parsed?.message;
+      const detail = this.#dialect.errorDetail(JSON.parse(body));
       if (detail) message += `: ${detail}`;
     } catch { if (body) message += `: ${String(body).slice(0, 200)}`; }
 
@@ -165,7 +183,7 @@ export class OpenAICompatClient {
   async #post(body, signal) {
     let res;
     try {
-      res = await this.#fetch(`${this.#config.baseUrl}/chat/completions`, {
+      res = await this.#fetch(`${this.#config.baseUrl}${this.#dialect.completionPath}`, {
         method: 'POST',
         headers: this.#headers(),
         body: JSON.stringify(body),
@@ -198,28 +216,19 @@ export class OpenAICompatClient {
     const text = await res.text();
     if (!res.ok) throw this.#error('completion failed', res, text);
 
-    const parsed = JSON.parse(text);
-    const choice = parsed.choices?.[0] ?? {};
+    const out = this.#dialect.parseComplete(JSON.parse(text), { profile: this.profile });
     const assembler = new ToolCallAssembler();
-    assembler.push(choice.message?.tool_calls);
+    assembler.push(out.toolCallDeltas);
 
     return {
       provider: this.name,
-      model: parsed.model ?? null,
-      content: choice.message?.content ?? '',
-      reasoning: this.#readReasoning(choice.message) ?? '',
+      model: out.model,
+      content: out.content,
+      reasoning: out.reasoning,
       toolCalls: assembler.finish(),
-      usage: parsed.usage ?? null,
-      finishReason: choice.finish_reason ?? null,
+      usage: out.usage,
+      finishReason: out.finishReason,
     };
-  }
-
-  #readReasoning(obj) {
-    if (!obj) return null;
-    for (const field of this.profile.reasoningFields) {
-      if (typeof obj[field] === 'string' && obj[field] !== '') return obj[field];
-    }
-    return null;
   }
 
   // Streaming. Yields:
@@ -238,32 +247,26 @@ export class OpenAICompatClient {
     const assembler = new ToolCallAssembler();
     const reader = res.body.getReader();
 
-    let content = '';
-    let reasoning = '';
-    let usage = null;
-    let finishReason = null;
-    let model = null;
+    // Per-stream scratch space for the dialect. The formats that key their
+    // deltas by content-block or item index need somewhere to remember the
+    // mapping, and it must not outlive one response.
+    const state = {};
+
+    const acc = { content: '', reasoning: '', usage: null, finishReason: null, model: null };
+
+    // One place where a parsed event becomes yielded events. It used to be two,
+    // and the second -- the flush after the stream ended -- had quietly lost
+    // `reasoning`: a provider whose last event carried reasoning would have had
+    // it dropped from the result. Two copies of a rule is how that happens.
+    const consume = (ev) => this.#handleEvent(ev, assembler, state, acc);
 
     try {
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
-        for (const ev of parser.push(value)) {
-          const out = this.#handleEvent(ev, assembler);
-          if (!out) continue;
-          if (out.model) model = out.model;
-          if (out.usage) { usage = out.usage; yield { type: 'usage', usage }; }
-          if (out.finishReason) finishReason = out.finishReason;
-          if (out.text) { content += out.text; yield { type: 'text', delta: out.text }; }
-          if (out.reasoning) { reasoning += out.reasoning; yield { type: 'reasoning', delta: out.reasoning }; }
-        }
+        for (const ev of parser.push(value)) yield* consume(ev);
       }
-      for (const ev of parser.end()) {
-        const out = this.#handleEvent(ev, assembler);
-        if (out?.usage) { usage = out.usage; yield { type: 'usage', usage }; }
-        if (out?.finishReason) finishReason = out.finishReason;
-        if (out?.text) { content += out.text; yield { type: 'text', delta: out.text }; }
-      }
+      for (const ev of parser.end()) yield* consume(ev);
     } finally {
       reader.releaseLock?.();
     }
@@ -272,39 +275,49 @@ export class OpenAICompatClient {
       type: 'done',
       result: {
         provider: this.name,
-        model,
-        content,
-        reasoning,
+        model: acc.model,
+        content: acc.content,
+        reasoning: acc.reasoning,
         toolCalls: assembler.finish(),
-        usage,
-        finishReason,
+        usage: acc.usage,
+        finishReason: acc.finishReason,
       },
     };
   }
 
-  #handleEvent(ev, assembler) {
-    if (ev.data === '') return null;
+  // Yields the events one SSE frame produced, and folds it into `acc`.
+  *#handleEvent(ev, assembler, state, acc) {
+    if (ev.data === '') return;
     let chunk;
     try {
       chunk = parseData(ev.data);
     } catch {
       // A provider that emits something that is not JSON has told us nothing
       // useful, but taking the turn down over it would be worse.
-      return null;
+      return;
     }
-    if (chunk === DONE) return null;
+    if (chunk === DONE) return;
 
-    const choice = chunk.choices?.[0];
-    const delta = choice?.delta ?? {};
-    assembler.push(delta.tool_calls);
+    let out;
+    try {
+      out = this.#dialect.parseEvent({ chunk, name: ev.event }, { profile: this.profile }, state);
+    } catch (e) {
+      // A dialect throws only for an error *event* -- the provider saying the
+      // response failed mid-stream. That is a provider failure like any other
+      // and must be classified as one, or the router will not rotate off it.
+      throw new ProviderError(`${this.name}: ${e.message}`, {
+        provider: this.name, kind: 'server-error',
+      });
+    }
+    if (!out) return;
 
-    return {
-      model: chunk.model ?? null,
-      usage: chunk.usage ?? null,
-      finishReason: choice?.finish_reason ?? null,
-      text: typeof delta.content === 'string' ? delta.content : '',
-      reasoning: this.#readReasoning(delta) ?? '',
-    };
+    assembler.push(out.toolCallDeltas);
+
+    if (out.model) acc.model = out.model;
+    if (out.usage) { acc.usage = out.usage; yield { type: 'usage', usage: out.usage }; }
+    if (out.finishReason) acc.finishReason = out.finishReason;
+    if (out.text) { acc.content += out.text; yield { type: 'text', delta: out.text }; }
+    if (out.reasoning) { acc.reasoning += out.reasoning; yield { type: 'reasoning', delta: out.reasoning }; }
   }
 }
 

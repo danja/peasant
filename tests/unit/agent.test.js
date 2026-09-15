@@ -10,7 +10,7 @@ import { describe as describeCall, preview } from '../../src/permission/Prompt.j
 import { TOOLS, byName } from '../../src/tools/registry.js';
 import { Terminal } from '../../src/ui/Terminal.js';
 import { Router } from '../../src/provider/Router.js';
-import { OpenAICompatClient } from '../../src/provider/OpenAICompatClient.js';
+import { ProviderClient } from '../../src/provider/Client.js';
 import { defineProfile } from '../../src/provider/profiles/generic.js';
 import { FakeProvider, frameChunks } from './lib/FakeProvider.js';
 import { TokenEstimator } from '../../src/agent/TokenEstimator.js';
@@ -248,7 +248,7 @@ async function harness(t, { policy = new Policy({ mode: 'allow' }), files = {}, 
   const fake = await new FakeProvider().start();
   t.after(() => { fake.stop(); fs.rmSync(root, { recursive: true, force: true }); });
 
-  const client = new OpenAICompatClient({
+  const client = new ProviderClient({
     profile, name: 'fake', key: 'k', baseUrl: fake.baseUrl, model: 'm', extraHeaders: {},
   });
   const prompt = { ask: async () => ({ decision: DECISION.deny, reason: 'no terminal' }) };

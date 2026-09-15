@@ -222,7 +222,7 @@ whether it is an agent wrapper with its own tool loop.
 HTTP 402  Payment required to access this resource. Visit your billing tab.
 ```
 
-An account action, not a code problem — see `danja-todo.md`. A 402 is
+An account action, not a code problem — see `MAINTAINER.md`. A 402 is
 classified as `provider-unavailable`: the router rotates past it *and* retires it
 for the session, because a billing problem will not resolve in the next few
 seconds. Getting that classification wrong in the other direction — treating it
@@ -315,7 +315,7 @@ ok
 Two rules bend for them, both deliberately and both enforced:
 
 - **Plaintext is allowed**, but only for a loopback address — the key never
-  leaves the machine. `OpenAICompatClient` refuses `http://` to anything else,
+  leaves the machine. `ProviderClient` refuses `http://` to anything else,
   and a profile with a loopback base URL must declare `requiresKey: false` or
   `defineProfile` throws.
 - **A catch-all model preference is reasonable here** where it would be reckless
@@ -333,3 +333,93 @@ only option that works with no network at all.
 - Whether `groq/compound` is a chat model or an agent wrapper.
 - Whether Mistral's `limit: 0` was exhaustion from the probe or an account
   state. It reported 125/625,000 that morning.
+
+## Subscription endpoints — Claude Code and Codex
+
+Added 2026-09-15. **Nothing in this section has been measured**, and that is the
+first thing to know about it. Every other provider above was probed, its
+response captured under `docs/raw/`, and its profile written from what came
+back. These two were written from documentation, which in this project is a
+claim rather than a fact.
+
+What *has* been measured is that the endpoints exist and that peasant's requests
+reach them in a shape they recognise. Unauthenticated `POST`, 2026-09-15:
+
+| URL | Response |
+|---|---|
+| `https://api.anthropic.com/v1/messages` | `401` — `x-api-key header is required` |
+| `https://api.anthropic.com/v1/chat/completions` | `401` — an OpenAI-shaped error envelope, so a compatibility layer exists there too |
+| `https://api.openai.com/v1/chat/completions` | `401` — `Authorization: Bearer` |
+
+One further measurement, 2026-09-15, with a **deliberately invalid** OAuth token
+placed in a scratch home directory — peasant's own path, end to end:
+
+```
+claude-code: listing models failed (HTTP 401): OAuth access token is invalid.
+```
+
+The wording is the finding. `/v1/models` did not answer `x-api-key header is
+required` and did not 404: it read `Authorization: Bearer` together with
+`anthropic-beta: oauth-2025-04-20` as an OAuth attempt and rejected only the
+token's value. The auth scheme, the headers and the path are therefore right,
+and the credential reader found and forwarded a token from a file laid out the
+way the profile expects. Everything past the token's validity remains untested.
+
+### What makes them different in kind
+
+Every provider above is a free tier reached with a key of its own. These two
+spend a **subscription**, borrowing the OAuth token that Claude Code or the
+Codex CLI has already stored on this machine. That is outside what Anthropic's
+and OpenAI's terms permit for a third-party client, and the token can be
+revoked. The decision to support them was taken knowingly; both are
+`autoEnable: false`, so neither is ever reached by accident.
+
+They also speak different wire formats, which is why `src/provider/dialects/`
+exists:
+
+| Provider | Endpoint | Format |
+|---|---|---|
+| `claude-code` | `https://api.anthropic.com/v1/messages` | Anthropic Messages |
+| `codex` | `https://chatgpt.com/backend-api/codex/responses` | OpenAI Responses |
+
+### The four things the Messages format does differently
+
+Each one is load-bearing, and each is why a translation layer was needed rather
+than a base URL:
+
+1. The system prompt is a top-level parameter, not a message with a role.
+2. A tool result is a *user* message carrying a `tool_result` block, and every
+   result for one assistant turn must arrive in a **single** user message. Split
+   across two, the API rejects the turn — and the split only happens when a task
+   calls two tools at once, so it would not show up in casual use.
+3. `max_tokens` is required, with no server-side default. This is the whole
+   reason `PEASANT_MAX_OUTPUT_TOKENS` exists; formats that do not require it are
+   still not sent it.
+4. Streaming is named events over content-block indices. A content block index
+   is **not** a tool call index — a response with text at index 0 and a
+   `tool_use` at index 1 has one tool call, at tool index 0. Conflating them
+   attaches the arguments to a call that does not exist.
+
+Usage also arrives in two halves: `input_tokens` in `message_start`,
+`output_tokens` in `message_delta`. Taking either alone reports a turn at half
+its real cost, and `TokenEstimator` calibrates itself on that number.
+
+### Credentials
+
+Peasant **reads** `~/.claude/.credentials.json` and `~/.codex/auth.json` and
+never writes them. Refreshing an OAuth token rotates it, and rotating another
+program's login from underneath it loses both; so an expired token is reported
+and the provider skipped, with the remedy named — run `claude` or `codex` once
+and it refreshes its own file.
+
+The field names in those files are *candidates* rather than a known path, for
+the same reason the rest of this section is unverified. A file matching none of
+them is reported with what was looked for and which keys it actually has, so the
+list can be corrected in one edit.
+
+### What a first run has to confirm
+
+See `MAINTAINER.md`. In short: the credential files' actual shape, whether
+`/v1/models` answers an OAuth token, what `CODEX_MODEL` should be set to, and
+whether either endpoint requires anything of the request that peasant does not
+currently send.

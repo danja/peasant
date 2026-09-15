@@ -15,10 +15,13 @@ import nvidia from './profiles/nvidia.js';
 import together from './profiles/together.js';
 import ollama from './profiles/ollama.js';
 import llamacpp from './profiles/llamacpp.js';
+import claudeCode from './profiles/claude-code.js';
+import codex from './profiles/codex.js';
+import { readCredential } from './Credentials.js';
 
 export const PROFILES = Object.freeze([
   groq, mistral, cerebras, openrouter, google, huggingface,
-  nvidia, together, ollama, llamacpp,
+  nvidia, together, ollama, llamacpp, claudeCode, codex,
 ]);
 
 export const PROFILE_NAMES = Object.freeze(PROFILES.map((p) => p.name));
@@ -39,17 +42,40 @@ export function byName(name) {
 
 // Resolves a profile against config: the base URL and model may be overridden
 // per provider, and a provider with no key is not usable.
-export function configure(profile, env) {
-  const key = env[profile.keyVar] ?? '';
+//
+// `deps` exists so tests can supply a clock and a file reader without writing
+// credential files into a real home directory.
+export function configure(profile, env, deps = {}) {
+  let key = env[profile.keyVar] ?? '';
+  let extraHeaders = profile.headers(env);
+  let problem = null;
+
+  // A credential another tool already holds, when no key was given explicitly.
+  // An explicit key always wins: it is a deliberate act, and the same rule
+  // Env.js applies to a real environment variable over a file.
+  if (key === '' && profile.credentialFile) {
+    const found = readCredential(profile.credentialFile, deps);
+    if (found.problem) {
+      // Not thrown. The file belongs to another program, and one unreadable
+      // login must not stop the providers that are fine.
+      problem = found.problem;
+    } else {
+      key = found.token;
+      extraHeaders = { ...extraHeaders, ...found.headers };
+    }
+  }
+
   return {
     profile,
     name: profile.name,
     key,
     // A local server has no account, so an empty key is not a reason to skip it.
     usable: profile.requiresKey ? key !== '' : true,
+    // Why it is unusable, when the answer is more interesting than "no key set".
+    problem,
     baseUrl: env[profile.baseUrlVar] || profile.baseUrl,
     model: env[profile.modelVar] || null,
-    extraHeaders: profile.headers(env),
+    extraHeaders,
   };
 }
 
@@ -79,7 +105,7 @@ export function selectModel(profile, ids, override = null) {
 // The configured order, as PEASANT_PROVIDERS gives it. A name that matches no
 // profile is an error rather than a warning: a typo here silently halves the
 // failover pool, and the symptom is "it stalls sometimes".
-export function resolveOrder(env) {
+export function resolveOrder(env, deps = {}) {
   const raw = (env.PEASANT_PROVIDERS ?? '').trim();
   const names = raw === '' ? DEFAULT_ORDER : raw.split(',').map((s) => s.trim()).filter(Boolean);
 
@@ -89,5 +115,5 @@ export function resolveOrder(env) {
     if (seen.has(n)) throw new Error(`provider ${n} listed twice in PEASANT_PROVIDERS`);
     seen.add(n);
   }
-  return names.map((n) => configure(byName(n), env));
+  return names.map((n) => configure(byName(n), env, deps));
 }

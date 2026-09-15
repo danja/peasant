@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Router, NoProviderError } from '../../src/provider/Router.js';
-import { OpenAICompatClient, ProviderError } from '../../src/provider/OpenAICompatClient.js';
+import { ProviderClient, ProviderError } from '../../src/provider/Client.js';
 import { defineProfile } from '../../src/provider/profiles/generic.js';
 import { FakeProvider, textChunks, defaultCompletion } from './lib/FakeProvider.js';
 
@@ -23,7 +23,7 @@ async function providerPair(t) {
   const a = await new FakeProvider().start();
   const b = await new FakeProvider().start();
   t.after(() => Promise.all([a.stop(), b.stop()]));
-  const mk = (name, fake) => new OpenAICompatClient({
+  const mk = (name, fake) => new ProviderClient({
     profile: profileFor(name), name, key: 'k', baseUrl: fake.baseUrl, model: 'm', extraHeaders: {},
   });
   return { a, b, clientA: mk('alpha', a), clientB: mk('beta', b) };

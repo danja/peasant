@@ -7,6 +7,8 @@
 // value, that is a new field here -- so every provider gains it at once and the
 // loop stays ignorant of who it is talking to.
 
+import { DEFAULT_DIALECT, byName as dialectByName } from '../dialects/index.js';
+
 // Model ids that are not chat models. Groq lists whisper and prompt-guard
 // entries, Mistral lists embedding, OCR and audio models; selecting one produces
 // a confusing failure several layers away from the cause.
@@ -41,6 +43,24 @@ export const GENERIC = {
 
   // Where the key goes. 'bearer' is Authorization: Bearer <key>.
   auth: 'bearer',
+
+  // Which wire format this endpoint speaks. Named after the format rather than
+  // the vendor, because more than one provider speaks each: see dialects/.
+  dialect: DEFAULT_DIALECT,
+
+  // The format's version, where it has one and sends it as a header. null for
+  // the formats that do not.
+  apiVersion: null,
+
+  // A catalogue for an endpoint that publishes none, which is the only reason
+  // to set it. Worse than asking the provider -- a hardcoded list goes stale
+  // silently -- so it stays empty for everyone that can be asked.
+  models: [],
+
+  // Where a credential comes from when it is not an API key in the
+  // environment: another tool's login, already on this machine. Data, so that
+  // reading it stays one implementation in Credentials.js. See claude-code.js.
+  credentialFile: null,
 
   // Extra headers, as a function of config so a profile can read env values.
   headers: () => ({}),
@@ -104,6 +124,10 @@ export function defineProfile(profile) {
 // No inline fallbacks: a profile missing something structural is a bug to fix
 // here, not a runtime surprise at the first request.
 function validate(p) {
+  // Throws on an unknown name, which is the point: a typo here would otherwise
+  // surface as a request sent in the wrong format.
+  dialectByName(p.dialect);
+
   // https everywhere, except a loopback address -- a local model server has no
   // TLS and needs none, because the key never leaves the machine.
   if (!/^https:\/\//.test(p.baseUrl)) {

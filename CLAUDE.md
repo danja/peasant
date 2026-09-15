@@ -63,9 +63,11 @@ zero-dependency and no-native rules still matter, because they are what stop a
 - `src/compat/` — `Preflight.js`, the startup capability check, sharing its checks with
   `tests/compat`
 - `src/config/` — `Config.js` (defaults → file → `${ENV}` → environment), `Env.js`
-- `src/provider/` — `OpenAICompatClient.js`, `SseParser.js`, `ToolCallAssembler.js`,
-  `RateLimiter.js`, `Router.js`, `ProfileRegistry.js` and `profiles/` (one file per
-  provider)
+- `src/provider/` — `Client.js`, `SseParser.js`, `ToolCallAssembler.js`,
+  `RateLimiter.js`, `Router.js`, `ProfileRegistry.js`, `Credentials.js` (reads
+  another tool's login, never writes it), `profiles/` (one file per provider) and
+  `dialects/` (one file per wire format — a dialect is named after the format,
+  a profile after the provider)
 - `src/agent/` — `Loop.js`, `Conversation.js`, `ContextBudget.js`, `Compactor.js`,
   `TokenEstimator.js` (measured constants, calibrated at runtime), `prompt.js`,
   `context-files.js` (`PEASANT.md` and `AGENTS.md`, capped and folded into the
@@ -141,7 +143,7 @@ the moment it happens — that is what makes the next one cheap.
 
 | Change | The file left behind | Symptom |
 |---|---|---|
-| *(none yet)* | | |
+| Renamed a profile field `anthropicVersion` → `apiVersion` in `profiles/generic.js` | `dialects/messages.js`, which still read the old name | The version header went out as `undefined`. Caught by a test written minutes later in the same session; nothing structural connected the two files. 2026-09-15. |
 
 **When adding a runtime dependency on a path, a value, or a list, find what else has to
 agree with it — and write the test that binds them.** A test asserting that two lists match
@@ -264,12 +266,21 @@ filesystem, the shell, the session store — is tested for real.
   the session's harness directs otherwise — Bash calls need per-call approval and Read
   does not.
 - **Log mistakes in `MISTAKES.md`**, newest first: what happened, root cause, prevention.
-- Keep **`TODO.md`** (what the project needs) and **`docs/danja-todo.md`** (what the user
+- Keep **`TODO.md`** (what the project needs) and **`MAINTAINER.md`** (what the user
   must do — anything needing hardware access, credentials, an account, or a decision that
   is theirs) current. Revise both at the end of any session that changes them; strike
   finished items into a "Confirmed done" section rather than deleting them, and say plainly
-  which things block which. `docs/danja-todo.md` is also the right place to record anything
+  which things block which. `MAINTAINER.md` is also the right place to record anything
   asserted about the target machine that has not actually been verified.
+- **`INBOX.md` is the unsorted pile, and it is not a third task list.** It holds what has
+  occurred to the user between sessions and belongs nowhere yet. **Check it periodically** —
+  at the start of a session, and before asking what to do next — and empty it as you go:
+  each item moves into `docs/plan.md` if it is a phase of work, `TODO.md` if it is
+  something the project needs, or `MAINTAINER.md` if it needs the user's own hands. An
+  item is struck from `INBOX.md` once it has landed somewhere with a home, not once it is
+  finished; leaving a copy behind is how three lists disagree. If an item turns out to be
+  none of those — a question, or a thing already done — answer it and strike it anyway.
+  A full inbox is fine. A stale one is not, and nothing tests this.
 
 ## Docs and worklog
 

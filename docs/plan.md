@@ -53,7 +53,7 @@ guard so they cost nothing:
 
 ## Phase 1 — Provider core — **complete**
 
-`SseParser`, `OpenAICompatClient`, `ToolCallAssembler`, `RateLimiter`, `Router`,
+`SseParser`, `ProviderClient`, `ToolCallAssembler`, `RateLimiter`, `Router`,
 `ProfileRegistry` with five profiles, `connect`, `Env`, `Terminal`/`Ansi`, and
 the local fake OpenAI-compatible server the later suites need.
 

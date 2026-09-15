@@ -11,12 +11,13 @@
   measured
 - [`mcp.md`](mcp.md) — MCP over stdio and HTTP: configuring it, and what the
   transports have to get right from their own responses
-- [`danja-todo.md`](danja-todo.md) — what the user needs to do
 - [`entries/`](entries/) — worklog, `YYYY-MM-DD_claude_title.md`
 - [`raw/`](raw/) — unedited probe output, kept so every figure above is traceable
 
 Not yet written, referenced by the plan: `prior-art.md` (Phase R4).
 
 The house rules are in [`../CLAUDE.md`](../CLAUDE.md); the project's own task
-list is [`../TODO.md`](../TODO.md); errors and their causes are in
+list is [`../TODO.md`](../TODO.md); what the maintainer must do by hand is
+[`../MAINTAINER.md`](../MAINTAINER.md); loose items not yet sorted into either
+are [`../INBOX.md`](../INBOX.md); errors and their causes are in
 [`../MISTAKES.md`](../MISTAKES.md).

@@ -20,7 +20,7 @@
 //
 // Base URLs, keys and model preferences come from src/provider/profiles/ via
 // ProfileRegistry -- this file keeps no table of its own. It does make its own
-// raw requests rather than going through OpenAICompatClient, because its job is
+// raw requests rather than going through ProviderClient, because its job is
 // to see below that abstraction: the raw headers and the raw SSE bytes are the
 // findings.
 
@@ -144,7 +144,7 @@ async function probeNonStreaming(provider) {
   };
 }
 
-// Reads the byte stream exactly as OpenAICompatClient will have to, keeping the
+// Reads the byte stream exactly as ProviderClient will have to, keeping the
 // raw bytes so SseParser and ToolCallAssembler can be tested against them.
 async function readStream(res) {
   const chunks = [];

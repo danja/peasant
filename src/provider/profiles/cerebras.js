@@ -7,7 +7,7 @@ import { defineProfile } from './generic.js';
 // headers on any response.
 //
 // The account needs attention before this provider can be used at all; see
-// docs/danja-todo.md. Re-run `node bin/probe-providers.js` afterwards, and this
+// MAINTAINER.md. Re-run `node bin/probe-providers.js` afterwards, and this
 // becomes verified only once there is an SSE capture behind it --
 // tests/guard/profile-coverage.test.js enforces that.
 export default defineProfile({

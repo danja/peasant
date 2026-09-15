@@ -103,9 +103,19 @@ function is one turn rather than eight.
 
 ## Providers
 
-Eight profiles: Groq, Mistral, Cerebras, OpenRouter, Google AI Studio, Hugging
-Face, and local Ollama and llama.cpp. Anything speaking the OpenAI shape works;
-adding one is a file.
+Twelve profiles. Ten speak the OpenAI chat-completions shape: Groq, Mistral,
+Cerebras, OpenRouter, Google AI Studio, Hugging Face, NVIDIA, Together, and
+local Ollama and llama.cpp. Anything else speaking that shape works too; adding
+one is a file.
+
+Two do not, and they are different in kind. `claude-code` speaks the Anthropic
+Messages format and `codex` speaks the OpenAI Responses format, and both
+authenticate by borrowing the OAuth token that Claude Code or the Codex CLI has
+already stored on this machine — a subscription rather than a free tier. Neither
+is enabled unless you name it in `PEASANT_PROVIDERS`, both are **unverified**
+against their real endpoints, and using a subscription credential from a
+third-party client is outside what Anthropic's and OpenAI's terms permit. Read
+the block in `example.env` before turning either on.
 
 **Providers rotate automatically.** They are tried in `PEASANT_PROVIDERS` order
 and peasant moves on when the current one is rate limited, unavailable or

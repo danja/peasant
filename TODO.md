@@ -1,12 +1,19 @@
 # TODO
 
-What the project needs. What *the user* needs to do is `docs/danja-todo.md`; an
+What the project needs. What *the user* needs to do is `MAINTAINER.md`; an
 item landing in one usually changes the other.
 
 ## Blocking
 
-Nothing. R1 is answered: every Node major from 18 to 26 passes all fourteen
-checks on the target, the floor is `>=22.0.0`, and Phase 1 can start.
+**`claude-code` and `codex` are unverified and unusable until probed.** Added
+2026-09-15 and measured in no respect: not the wire format, not the header
+names, not the shape of the credential files. Both are `autoEnable: false` and
+cannot be reached by accident, so this blocks only them. Everything a first run
+must confirm is in `MAINTAINER.md` — it needs Danja's credentials and
+spends Danja's subscription, so it cannot be done from here.
+
+Nothing else blocks. R1 remains answered: every Node major from 18 to 26 passes
+all fourteen checks on the target, and the floor is `>=22.0.0`.
 
 ## Phase R, remaining
 
@@ -172,10 +179,117 @@ profile fields exist.
 - [ ] Related: peasant editing its own repository is allowed and worked, but the
       permission prompt is the only thing between a session and its own source.
 
+## Dialects
+
+- [x] ~~A second and third wire format~~ — `src/provider/dialects/`, one file
+      per format, named after the format and never the vendor. The client kept
+      transport, budget and failure classification; the format came out.
+      `tests/guard/dialect-coverage.test.js` binds the list to the directory.
+- [ ] **No capture stands behind either new dialect.** `tests/unit/dialects.test.js`
+      proves the translation is self-consistent and that the client drives it. It
+      cannot prove the shape is the shape those endpoints actually send. Record a
+      capture under `docs/raw/` the first time one answers, and only then may
+      `verified: true` go into a profile.
+- [ ] **`bin/probe-providers.js` speaks only chat-completions.** It builds raw
+      requests on purpose — that is its job — but it means the two new providers
+      cannot be probed with the tool that exists for probing providers, which is
+      precisely when one is most wanted. Teach it the dialect, or write the
+      capture by hand and say so.
+- [ ] **Neither new provider can refresh its token.** Deliberate: refreshing
+      rotates it, and rotating another program's login from underneath it loses
+      both. If this becomes tiresome the answer is a cached token in
+      `~/.peasant/`, never a write to the other tool's file.
+- [ ] **A guard for reads of undeclared profile fields.** A field renamed in
+      `generic.js` while a dialect went on reading the old name sent a header as
+      `undefined` (`MISTAKES.md`, 2026-09-15). One occurrence is a mistake; a
+      second would mean the structure, not the reader, is wrong.
+
+## From the harness-design reading
+
+Source: `docs/entries/2026-09-15_claude_harness-design-reading.md`, on
+<https://www.anthropic.com/engineering/harness-design-long-running-apps>. Most of
+that article is priced out of this project — its headline is 20x cost for 20x
+quality, which is the axis peasant exists to refuse. The reasoning for what was
+taken and what was rejected is in the entry; these are the actions.
+
+**H1 blocks H2 and H4.** All three are claims about behaviour, and CLAUDE.md
+already requires that budget changes be measured rather than asserted — so the
+thing to build first is the way to measure.
+
+- [ ] **H1. Write `bin/measure-task.js`: one fixed task, run repeatably, numbers
+      out.** Three items below need the same protocol, and CLAUDE.md already
+      prescribes it ("record tokens used, turns and wall time for a fixed task in
+      `docs/entries/`") without anything existing to do it with. A manual
+      protocol needed three times is a script.
+      - Takes a task prompt file, a provider, and a repeat count.
+      - Runs the agent loop headless, as `peasant run` does, in a scratch copy
+        of a fixture workspace so each run starts identically.
+      - Emits per run: prompt/completion/reasoning tokens (from `usage`, not
+        estimated), turn count, wall time, whether it hit `maxTurns`, and
+        whether the task's own check passed.
+      - Writes a markdown table fit to paste into `docs/entries/`.
+      - Fixture task should have a machine-checkable outcome — a failing test in
+        a small repo that the agent must make pass — so "finished" is not a
+        judgement call.
+      - **Not** part of `npm test`: it spends real tokens against a real
+        provider, so it is run deliberately, like `test:live`.
+      - Done when two runs of the same task on the same provider produce numbers
+        close enough to tell a 20% difference from noise.
+
+- [ ] **H2. Measure what "Token budget is tight" costs.** *Blocked on H1.*
+      `src/agent/prompt.js` resends that sentence on every turn;
+      `Compactor.js:164` injects `[N earlier messages dropped...]`; `Tool.js:89`
+      marks every truncated tool result. The article names the failure mode this
+      invites — **context anxiety**, models wrapping up prematurely because they
+      believe they are running out of room — and peasant emits that signal
+      harder than any harness in it.
+      - Run the H1 task on the same provider, n≥5 each, under three prompts:
+        the sentence as it stands; the sentence removed; the sentence replaced
+        with a neutral economy instruction that does not mention scarcity
+        (e.g. "Read narrow windows of files rather than whole ones.").
+      - Compare completion rate first, tokens second. The hypothesis is that
+        the current wording finishes fewer tasks while saving few enough tokens
+        not to matter.
+      - Whatever the result, record it in `docs/entries/` and put the winning
+        wording in `prompt.js` with the measurement cited in a comment — the
+        system prompt is 132 measured tokens and every line in it is load-bearing
+        or should go.
+
+- [ ] **H3. Prototype compaction-by-reset against the current compactor.**
+      `Compactor` keeps the summary *and* the recent turns and pays for both on
+      every turn after; a reset writes a handoff file and pays for it once, when
+      it is read. On an 8,000 TPM budget that inverts the article's economics,
+      where reset was the expensive option.
+      - `session/Store` already writes a `reset` record, so the transcript
+        format anticipates this — check what it currently writes before adding
+        anything.
+      - Write the handoff to `~/.peasant/`, never the workspace: a file that
+        appears in somebody's repository mid-task is a bug report.
+      - Keep it behind a preference so both paths can be run by H1 on the same
+        task, rather than replacing the compactor on the strength of an argument.
+      - Done when the two are compared on one task with numbers recorded; if
+        reset does not win, say so in the entry and keep the compactor.
+
+- [ ] **H4. Nothing checks the model's claim that it is finished.** *Blocked on
+      H1.* The loop ends when the model says it is done, and the article is
+      convincing that agents confidently praise their own work. A separate
+      evaluator agent is unaffordable here at any token price; the affordable
+      version is a sentence.
+      - Try adding to the system prompt: before declaring a task done, run the
+        project's tests with `bash` and read the output.
+      - Measure with H1's machine-checkable fixture, which already distinguishes
+        "said it was done" from "was done" — that gap is the whole measurement.
+      - Weigh it against the cost: extra turns and a full test run's output
+        through `maxToolResultChars`, on a budget where one careless read costs
+        most of a minute. It may not be affordable either, and that is a result.
+
 ## Housekeeping
 
-- [ ] **`npm test` takes about twenty seconds**, up from three and a half before
-      MCP existed. It is not waste: the suite spawns a dozen real MCP servers,
+- [ ] **`npm test` takes between 3.5 and 4.1 seconds** — three consecutive runs
+      on 2026-09-15 gave 4.13s, 3.52s and 3.71s over 531 tests, against 3.9s for
+      490 tests before the dialect work. This entry previously claimed twenty
+      seconds, which was wrong by a factor of five and is exactly the kind of
+      prose nothing tests. It is not waste: the suite spawns a dozen real MCP servers,
       several real HTTP servers, runs ripgrep, and waits out a real one-second
       `bash` timeout. Measured per client: 475 ms to connect, 95 ms to close.
       Worth watching rather than fixing — a suite people stop running is worse

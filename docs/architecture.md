@@ -12,6 +12,16 @@
 6. **Streaming is the default path**, not an alternate one. The non-streaming
    path is the special case and gets fewer tests, so it must not be where the
    harness normally lives.
+7. **Every component here encodes an assumption about what the model cannot do
+   on its own.** So when a model improves, the move is to *remove* a piece and
+   re-measure, not only to add one. Peasant has a harder version of this than
+   most: it rotates providers mid-session, so one conversation may run on a 20B
+   model and a large one within the same task, and every scaffold is therefore
+   tuned to the **weakest model in the rotation**. There is no single model whose
+   improvement lets a piece be dropped. That is a real limit on ever simplifying
+   this codebase, and it follows from the specification rather than from a
+   mistake. (Borrowed from Anthropic's harness-design piece; see
+   `entries/2026-09-15_claude_harness-design-reading.md`.)
 
 ## Shape
 
@@ -20,8 +30,8 @@ bin/     peasant.js   probe-runtime.js   probe-node-matrix.sh   probe-providers.
 src/
   compat/    Preflight.js
   config/    Config.js  Env.js
-  provider/  OpenAICompatClient.js  SseParser.js  ToolCallAssembler.js
-             RateLimiter.js  Router.js  ProfileRegistry.js  profiles/
+  provider/  Client.js  SseParser.js  ToolCallAssembler.js  Credentials.js
+             RateLimiter.js  Router.js  ProfileRegistry.js  profiles/  dialects/
   agent/     Loop.js  Conversation.js  ContextBudget.js  Compactor.js
              TokenEstimator.js
   tools/     Tool.js  registry.js  read.js write.js edit.js ls.js glob.js
@@ -44,6 +54,23 @@ boundaries, including one byte at a time.
 with the function name in the first delta and the arguments dribbled across
 many. Providers disagree on the details. One assembler, one fixture set per
 provider, recorded by `probe-providers.js`.
+
+**`dialects/`.** Three wire formats, one client. A *dialect* answers "what does
+the wire look like" — chat-completions, Anthropic Messages, OpenAI Responses —
+while a *profile* answers "who is on the other end". Dialects are named after
+the format and never after a vendor, because more than one provider may speak
+each. Each one translates in both directions and normalises everything on the
+way out into the shapes the rest of peasant already reads: tool calls as
+streamed OpenAI tool-call deltas, usage as `prompt_tokens`/`completion_tokens`.
+Translating at the edge is what keeps `ToolCallAssembler`, `TokenEstimator` and
+`EventPrinter` ignorant of who answered, and it is why adding the second and
+third formats changed no file in `src/agent/`.
+
+**`Credentials.js`.** The one place that reads a file peasant does not own —
+Claude Code's and the Codex CLI's stored logins. It never writes them:
+refreshing rotates a token, and rotating another program's login from underneath
+it loses both. A missing, unparseable or expired file is reported and skipped
+with the remedy named, never thrown, for the same reason `./.env` is.
 
 **`RateLimiter` and `Router`.** Ask the limiter before each request; feed the
 response headers back after. On 429, honour `retry-after`, then rotate to the

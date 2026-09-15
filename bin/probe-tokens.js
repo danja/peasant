@@ -21,7 +21,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { load, redact } from '../src/config/Env.js';
 import { resolveOrder, selectModel } from '../src/provider/ProfileRegistry.js';
-import { OpenAICompatClient } from '../src/provider/OpenAICompatClient.js';
+import { ProviderClient } from '../src/provider/Client.js';
 import { specs } from '../src/tools/registry.js';
 import { systemPrompt } from '../src/agent/prompt.js';
 
@@ -61,9 +61,9 @@ async function main() {
   }
 
   const config = usable[0];
-  const client0 = new OpenAICompatClient(config);
+  const client0 = new ProviderClient(config);
   if (!config.model) config.model = selectModel(config.profile, await client0.listModels(), null);
-  const client = new OpenAICompatClient(config);
+  const client = new ProviderClient(config);
 
   const say = (s) => process.stdout.write(`${redact(s, env)}\n`);
   say(`measuring against ${config.name} / ${config.model}`);

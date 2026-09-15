@@ -4,7 +4,7 @@
 // something you can ask a question of.
 
 import { resolveOrder, selectModel } from './ProfileRegistry.js';
-import { OpenAICompatClient } from './OpenAICompatClient.js';
+import { ProviderClient } from './Client.js';
 import { Router } from './Router.js';
 import { preferences } from '../config/preferences.js';
 
@@ -32,15 +32,23 @@ export async function connect(env, { signal, onProgress = () => {} } = {}) {
   if (usable.length === 0) {
     throw new Error(
       'no provider has a key. Copy example.env to .env and fill in at least one:\n' +
-      configured.map((c) => `  ${c.name}: ${c.profile.keyVar}`).join('\n'),
+      // A provider whose credential file could not be read says so here. "no
+      // key set" would be a lie for it, and the difference is the whole of the
+      // remedy.
+      configured.map((c) => `  ${c.name}: ${c.problem ?? c.profile.keyVar}`).join('\n'),
     );
   }
 
+  const prefs = preferences(env);
   const clients = [];
   const failed = [];
 
   for (const config of usable) {
-    const client = new OpenAICompatClient(config);
+    // The output ceiling the Messages format requires. Read from preferences
+    // rather than written into the dialect, so it is one documented setting
+    // instead of a number buried in a translation function.
+    config.maxOutputTokens = prefs.maxOutputTokens;
+    const client = new ProviderClient(config);
     try {
       if (!config.model) {
         onProgress(`resolving a model for ${config.name}`);
@@ -72,7 +80,6 @@ export async function connect(env, { signal, onProgress = () => {} } = {}) {
     );
   }
 
-  const prefs = preferences(env);
   const router = new Router(clients, { rotate: prefs.rotate, maxWaitMs: prefs.maxWaitMs });
   return { router, clients, skipped, failed, prefs };
 }
