@@ -28,24 +28,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { load, redact } from '../src/config/Env.js';
 import { resolveOrder, selectModel } from '../src/provider/ProfileRegistry.js';
+import { ToolCallAssembler } from '../src/provider/ToolCallAssembler.js';
+// The one tool used for every dialect test, shared with `peasant doctor`'s
+// capability check so the probe and the check cannot come to ask different
+// questions. Deliberately trivial: the question is the shape of the call, not
+// the model's judgement.
+import { CHECK_TOOL as TOOL } from '../src/provider/tool-check.js';
 
-// The one tool used for every dialect test. Deliberately trivial: the question
-// is the shape of the call, not the model's judgement.
-const TOOL = {
-  type: 'function',
-  function: {
-    name: 'get_weather',
-    description: 'Get the current weather for a city.',
-    parameters: {
-      type: 'object',
-      properties: {
-        city: { type: 'string', description: 'City name' },
-        unit: { type: 'string', enum: ['c', 'f'], description: 'Temperature unit' },
-      },
-      required: ['city'],
-    },
-  },
-};
 
 const OUT_DIR = path.join('docs', 'raw', `${new Date().toISOString().slice(0, 10)}_providers`);
 
@@ -213,6 +202,7 @@ async function probeStreaming(provider, { withTools }) {
     finishReason: parsed.map((e) => e?.choices?.[0]?.finish_reason).filter(Boolean).pop() ?? null,
     toolDeltaCount: toolDeltas.length,
     firstToolDelta: toolDeltas[0] ?? null,
+    toolDeltas,
     assembledToolCall: assembleToolCalls(toolDeltas),
     raw,
   };
@@ -237,6 +227,76 @@ function assembleToolCalls(deltas) {
     try { argsParsed = JSON.parse(c.args); argsValid = true; } catch { /* reported as invalid */ }
     return { ...c, argsValid, argsParsed };
   });
+}
+
+// Answers the tool call the provider just made, and sends the conversation back.
+//
+// This is the turn that matters and the probe went without it until 2026-09-15,
+// when a Gemini session failed on exactly this step: Gemini 3.x attaches a
+// `thought_signature` to every function call and answers 400 if it is not
+// returned. One request proves a tool call *arrives*. Only a second proves a
+// conversation can continue past one, which is the thing a harness needs.
+//
+// The assistant turn is rebuilt with the real `ToolCallAssembler` and the same
+// message shape `Conversation` produces, deliberately: the question here is not
+// what the provider sent, it is whether what *peasant* sends back is accepted.
+async function probeSecondTurn(provider, firstTurn) {
+  const assembler = new ToolCallAssembler();
+  for (const batch of firstTurn.toolDeltas ?? []) assembler.push(batch);
+  const calls = assembler.finish();
+  if (calls.length === 0) return { skipped: 'the first turn made no tool call' };
+
+  const messages = [
+    { role: 'user', content: 'What is the weather in Paris? Use the tool.' },
+    {
+      role: 'assistant',
+      content: null,
+      tool_calls: calls.map((c) => ({
+        ...(c.extra ?? {}),
+        id: c.id,
+        type: 'function',
+        function: { name: c.name, arguments: c.arguments },
+      })),
+    },
+    ...calls.map((c) => ({
+      role: 'tool', tool_call_id: c.id, content: '{"temp_c":17,"sky":"cloudy"}',
+    })),
+  ];
+
+  const { res, ms } = await chat(provider, {
+    model: provider.model,
+    messages,
+    tools: [TOOL],
+    tool_choice: 'auto',
+    max_tokens: 64,
+    temperature: 0,
+    stream: true,
+    stream_options: { include_usage: true },
+  });
+
+  if (!res.ok || !res.body) {
+    const text = res.body ? await res.text() : '';
+    return {
+      status: res.status, ms,
+      // The whole point of the probe: say what the provider objected to.
+      error: text.slice(0, 600),
+      carriedExtra: calls.some((c) => c.extra !== null),
+    };
+  }
+
+  const raw = await readStream(res);
+  const events = sseEvents(raw);
+  const parsed = events.filter((e) => e !== '[DONE]').map((e) => { try { return JSON.parse(e); } catch { return null; } });
+  return {
+    status: res.status, ms,
+    bytes: raw.length,
+    events: events.length,
+    text: parsed.map((e) => e?.choices?.[0]?.delta?.content ?? '').join(''),
+    usage: parsed.find((e) => e?.usage)?.usage ?? null,
+    carriedExtra: calls.some((c) => c.extra !== null),
+    extraKeys: [...new Set(calls.flatMap((c) => Object.keys(c.extra ?? {})))],
+    raw,
+  };
 }
 
 async function probeProvider(provider) {
@@ -264,8 +324,17 @@ async function probeProvider(provider) {
   const asm = report.toolStreaming.assembledToolCall ?? [];
   say(`  tools+stream  HTTP ${report.toolStreaming.status}, ${report.toolStreaming.toolDeltaCount} tool deltas, assembled=${asm.length}, argsValid=${asm.map((a) => a.argsValid).join(',') || 'n/a'}`);
 
+  report.secondTurn = await probeSecondTurn(provider, report.toolStreaming);
+  if (report.secondTurn.skipped) {
+    say(`  turn 2        skipped: ${report.secondTurn.skipped}`);
+  } else {
+    const st = report.secondTurn;
+    say(`  turn 2        HTTP ${st.status}, ${st.ms} ms, extras echoed=${st.carriedExtra ? (st.extraKeys ?? []).join('+') || 'yes' : 'none'}`
+      + `${st.error ? ` -- ${st.error.replace(/\s+/g, ' ').slice(0, 160)}` : ''}`);
+  }
+
   // Keep the bytes. Invented fixtures test the parser you imagined.
-  for (const [label, r] of [['stream', report.streaming], ['tools', report.toolStreaming]]) {
+  for (const [label, r] of [['stream', report.streaming], ['tools', report.toolStreaming], ['turn2', report.secondTurn]]) {
     if (r?.raw) {
       const f = path.join(OUT_DIR, `${provider.name}-${label}.sse`);
       fs.writeFileSync(f, redact(r.raw.toString('utf8'), env));
@@ -283,12 +352,14 @@ function markdown(reports) {
   L.push('Generated by `bin/probe-providers.js`. Every figure here came from a');
   L.push('response, not from documentation. Keys are redacted.');
   L.push('');
-  L.push('| Provider | Model | Chat | Stream | `include_usage` | Tool deltas | Args valid JSON |');
-  L.push('|---|---|---|---|---|---|---|');
+  L.push('| Provider | Model | Chat | Stream | `include_usage` | Tool deltas | Args valid JSON | Turn 2 |');
+  L.push('|---|---|---|---|---|---|---|---|');
   for (const r of reports) {
-    if (!r.model) { L.push(`| ${r.name} | — | HTTP ${r.models?.status} | — | — | — | — |`); continue; }
+    if (!r.model) { L.push(`| ${r.name} | — | HTTP ${r.models?.status} | — | — | — | — | — |`); continue; }
     const asm = r.toolStreaming?.assembledToolCall ?? [];
-    L.push(`| ${r.name} | \`${r.model}\` | ${r.nonStreaming?.status} | ${r.streaming?.status} | ${r.streaming?.includeUsageHonoured ? 'yes' : '**no**'} | ${r.toolStreaming?.toolDeltaCount ?? 0} | ${asm.length ? asm.map((a) => a.argsValid).join(', ') : 'n/a'} |`);
+    const st = r.secondTurn ?? {};
+    const turn2 = st.skipped ? 'n/a' : (st.status === 200 ? '200' : `**${st.status}**`);
+    L.push(`| ${r.name} | \`${r.model}\` | ${r.nonStreaming?.status} | ${r.streaming?.status} | ${r.streaming?.includeUsageHonoured ? 'yes' : '**no**'} | ${r.toolStreaming?.toolDeltaCount ?? 0} | ${asm.length ? asm.map((a) => a.argsValid).join(', ') : 'n/a'} | ${turn2} |`);
   }
   L.push('');
 
@@ -322,6 +393,28 @@ function markdown(reports) {
       L.push('```');
       L.push('');
     }
+    const st = r.secondTurn;
+    if (st && !st.skipped) {
+      L.push('### Second turn — the tool result sent back');
+      L.push('');
+      L.push(`HTTP ${st.status} in ${st.ms} ms.`);
+      L.push('');
+      if (st.carriedExtra) {
+        L.push(`The tool call carried provider fields peasant does not interpret: \`${(st.extraKeys ?? []).join('`, `')}\`.`);
+        L.push('These were echoed back verbatim. Gemini 3.x **requires** this — it answers');
+        L.push('400 if its `thought_signature` does not return — which is why the probe');
+        L.push('rebuilds the assistant turn the way `Conversation` does rather than by hand.');
+      } else {
+        L.push('The tool call carried no provider-specific fields.');
+      }
+      L.push('');
+      if (st.error) {
+        L.push('```');
+        L.push(st.error.slice(0, 400));
+        L.push('```');
+        L.push('');
+      }
+    }
     if (r.streaming?.usage) {
       L.push(`Streamed usage: \`${JSON.stringify(r.streaming.usage)}\``);
       L.push('');
@@ -336,13 +429,20 @@ async function main() {
   env = load();
 
   const configured = resolveOrder(env);
-  let chosen = configured.filter((c) => c.usable);
-  if (only) chosen = chosen.filter((c) => c.name === only);
+  const keyed = configured.filter((c) => c.usable);
+  const chosen = only ? keyed.filter((c) => c.name === only) : keyed;
 
-  const skipped = configured.filter((c) => !chosen.includes(c)).map((c) => `${c.name} (${c.profile.keyVar})`);
+  // Two different reasons, reported as two different lines. Reporting them as
+  // one said "skipped, no key: groq (GROQ_API_KEY)" about an account whose key
+  // was sitting in .env and working -- a probe that lies about the thing it
+  // exists to find out is worse than one that says nothing.
+  const unkeyed = configured.filter((c) => !c.usable)
+    .map((c) => `${c.name} (${c.problem ?? `no ${c.profile.keyVar}`})`);
+  const notAsked = keyed.filter((c) => !chosen.includes(c)).map((c) => c.name);
 
-  say(`providers with a key: ${chosen.map((p) => p.name).join(', ') || 'none'}`);
-  if (skipped.length) say(`skipped, no key:      ${skipped.join(', ')}`);
+  say(`providers with a key: ${keyed.map((p) => p.name).join(', ') || 'none'}`);
+  if (unkeyed.length) say(`skipped, no key:      ${unkeyed.join(', ')}`);
+  if (notAsked.length) say(`skipped, --only ${only}:${' '.repeat(Math.max(1, 6 - only.length))}${notAsked.join(', ')}`);
   if (chosen.length === 0) {
     say('\nNothing to probe. Copy example.env to .env and fill in at least one key.');
     process.exitCode = 1;

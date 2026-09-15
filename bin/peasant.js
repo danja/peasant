@@ -34,6 +34,7 @@ const USAGE = `peasant ${PKG.version} -- ${PKG.description}
   peasant doctor           check the runtime, the search engine and the configuration
 
   --allow-all              run tools without asking
+  --no-tool-check          skip doctor's tool-call check, which spends a few tokens
   --version                print the version
   --help                   this
 
@@ -61,6 +62,11 @@ async function main(argv) {
     term.error(term.paint(`  ${problem}`, 'yellow'));
   }
   const allowAll = argv.includes('--allow-all');
+  // `doctor` asks each provider's model to make one tool call, which is the only
+  // part of it that spends tokens. On by default -- a check that must be
+  // remembered is a check that will not be run -- and this turns it off for when
+  // the budget matters more than the answer.
+  const noToolCheck = argv.includes('--no-tool-check');
   const resumeAt = argv.indexOf('--resume');
   // `--resume` alone means the latest here; `--resume <id>` names one. The id
   // is only the next argument if it is not itself a flag or a command.
@@ -90,7 +96,7 @@ async function main(argv) {
       case 'models': return await models(term, env, { signal });
       case 'sessions': return await sessions(term, env);
       case 'mcp': return await mcp(term, env, { signal });
-      case 'doctor': return await doctor(term, env, PKG, { signal });
+      case 'doctor': return await doctor(term, env, PKG, { signal, toolCheck: !noToolCheck });
       default:
         term.error(`unknown command ${JSON.stringify(command)}\n\n${USAGE}`);
         return 64;

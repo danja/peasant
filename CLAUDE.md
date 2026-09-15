@@ -148,6 +148,8 @@ the moment it happens — that is what makes the next one cheap.
 | Change | The file left behind | Symptom |
 |---|---|---|
 | Renamed a profile field `anthropicVersion` → `apiVersion` in `profiles/generic.js` | `dialects/messages.js`, which still read the old name | The version header went out as `undefined`. Caught by a test written minutes later in the same session; nothing structural connected the two files. 2026-09-15. |
+| Captured a Google tool-call response containing `extra_content.google.thought_signature` | `ToolCallAssembler` and `Conversation`, which read only the fields they already knew | Gemini 3.x requires the signature echoed back and answers 400 without it, so tool-using sessions died on turn two while `peasant ask` worked. The capture proving it sat in `docs/raw/` for three days, read by five passing tests — none of which looks at a field it was not expecting. Nothing compared what a provider *sends* against what we *consume*. 2026-09-15. |
+| Gave `bin/probe-providers.js` an `--only <provider>` flag | `tests/unit/lib/fixtures.js`, which resolved captures by "newest directory wins" | A one-provider probe wrote a dated directory holding one provider, and the suite lost every other provider's fixtures at a stroke. Surfaced as `ENOENT` on a Mistral capture that was still on disk and had not been touched, so the error named a file and a provider that were both innocent. Now indexed per filename, with `tests/unit/fixtures.test.js` asserting it. 2026-09-15. |
 
 **When adding a runtime dependency on a path, a value, or a list, find what else has to
 agree with it — and write the test that binds them.** A test asserting that two lists match

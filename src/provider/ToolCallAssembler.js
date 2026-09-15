@@ -16,6 +16,19 @@
 // A malformed argument string is reported, not thrown. The model producing
 // invalid JSON is a thing that happens, and the loop can ask it again; an
 // exception here would take the whole turn down instead.
+//
+// Anything on a tool call that is *not* one of the four fields below is kept
+// verbatim in `extra` and handed back untouched. Gemini 3.x is why: it attaches
+// `extra_content.google.thought_signature` to every function call and rejects
+// the next turn with a 400 if it does not come back. Reading only the fields we
+// understand is what lost it, and that capture had been in `docs/raw/` since
+// the day Google was first probed. A provider may add a field that becomes
+// mandatory; keeping what we do not understand costs nothing and is the only
+// thing that survives that.
+
+// The fields this assembler interprets. Everything else on a delta is the
+// provider's own and is preserved rather than dropped.
+const KNOWN = new Set(['index', 'id', 'type', 'function']);
 
 export class ToolCallAssembler {
   #byIndex = new Map();
@@ -33,13 +46,21 @@ export class ToolCallAssembler {
       const index = Number.isInteger(d.index) ? d.index : 0;
 
       if (!this.#byIndex.has(index)) {
-        this.#byIndex.set(index, { index, id: null, type: 'function', name: '', arguments: '' });
+        this.#byIndex.set(index, { index, id: null, type: 'function', name: '', arguments: '', extra: {} });
         this.#order.push(index);
       }
       const acc = this.#byIndex.get(index);
 
       if (d.id) acc.id = d.id;
       if (d.type) acc.type = d.type;
+
+      // Assigned, not concatenated: an unknown field is an opaque value, and
+      // the only safe assumption about a value we do not understand is that the
+      // provider meant the whole of it. A signature arrives once, in the delta
+      // that opens the call, and later deltas carry only argument text.
+      for (const [k, v] of Object.entries(d)) {
+        if (!KNOWN.has(k) && v !== undefined) acc.extra[k] = v;
+      }
 
       const fn = d.function;
       if (fn) {
@@ -83,6 +104,10 @@ export class ToolCallAssembler {
         args: valid ? args : null,
         valid,
         error,
+        // null rather than {} when there is nothing, so a caller can spread it
+        // without asking, and so the common case adds nothing to a session
+        // record.
+        extra: Object.keys(c.extra).length > 0 ? { ...c.extra } : null,
       };
     });
   }

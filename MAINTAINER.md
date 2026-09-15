@@ -107,5 +107,24 @@ your subscription. So every item is something only you can do.
 - [ ] **A CPU-baseline-safe Ollama or llama.cpp build on the target** has not
       been tested. Both profiles are unverified against local servers on that
       hardware.
-- [ ] **Keys for NVIDIA and Together** would let their profiles be probed and
-      move off `verified: false`.
+- [ ] **A key for Together** would let its profile be probed and move off
+      `verified: false`. NVIDIA's is done — see below.
+
+## Confirmed done
+
+- [x] ~~**Keys for NVIDIA and Together**~~ — NVIDIA done 2026-09-15: you added
+      `NVIDIA_API_KEY` to `.env`, the profile was probed, corrected and is now
+      `verified: true` with captures in `docs/raw/2026-09-15_providers/`.
+      Together is still outstanding and stays on the open list above.
+
+      **Two things about NVIDIA that are yours to decide, not the code's:**
+
+      - **It is on credits, not a free tier, and your balance is not visible to
+        peasant.** No response header reports it. The provider will work and
+        then abruptly stop, and the only place to see how much is left is
+        <https://build.nvidia.com>. This is why `autoEnable` is false.
+      - **Your `.env` has `PEASANT_PROVIDERS=nvidia,groq,...`, putting NVIDIA
+        first.** That spends the finite thing before the renewable ones. If that
+        was deliberate — it is the fastest way to use credits before they
+        expire — leave it. If it was just where the name landed, move it last.
+        Nothing will warn you either way.

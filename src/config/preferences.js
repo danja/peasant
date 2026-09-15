@@ -82,6 +82,17 @@ export const DEFAULTS = Object.freeze({
   // transcripts is a slow leak and a growing pile of whatever the workspace
   // contained. Old enough to have forgotten, recent enough to still resume.
   keepSessions: 100,
+
+  // How long `peasant doctor` waits for a provider to answer its tool-call
+  // check before calling it a failure.
+  //
+  // A diagnostic that hangs is a bad diagnostic, and hanging is a real outcome
+  // here rather than a hypothetical: two models in NVIDIA's catalogue returned
+  // nothing at 45 seconds and nothing again at 150 (docs/providers.md). Thirty
+  // seconds is well beyond the slowest passing check measured -- NVIDIA's was
+  // 3.3 s -- and short enough that seven providers cannot cost a coffee break.
+  // Never reached on a healthy provider, so it does not need to be generous.
+  toolCheckTimeoutMs: 30_000,
 });
 
 // Environment variable for each, so everything tunable is tunable from .env.
@@ -95,6 +106,7 @@ const ENV_KEYS = Object.freeze({
   keepRecent: 'PEASANT_KEEP_RECENT',
   maxOutputTokens: 'PEASANT_MAX_OUTPUT_TOKENS',
   keepSessions: 'PEASANT_KEEP_SESSIONS',
+  toolCheckTimeoutMs: 'PEASANT_TOOL_CHECK_TIMEOUT_MS',
 });
 
 export const TUNABLE_ENV_VARS = Object.freeze(Object.values(ENV_KEYS));
@@ -138,6 +150,7 @@ export function preferences(env = {}) {
   set('keepRecent', (r, n) => readNumber(r, n, { min: 2, max: 50, integer: true }));
   set('maxOutputTokens', (r, n) => readNumber(r, n, { min: 256, max: 200_000, integer: true }));
   set('keepSessions', (r, n) => readNumber(r, n, { min: 1, max: 100_000, integer: true }));
+  set('toolCheckTimeoutMs', (r, n) => readNumber(r, n, { min: 1_000, max: 600_000, integer: true }));
 
   return Object.freeze(out);
 }

@@ -31,6 +31,12 @@ export class Conversation {
   // working, it is most of the token cost (docs/providers.md), and no provider
   // requires it echoed.
   //
+  // A call's `extra` -- whatever the provider attached that we do not interpret
+  // -- *is* sent back, verbatim. Gemini 3.x requires its own
+  // `extra_content.google.thought_signature` returned with every function call
+  // and answers 400 without it, so the distinction is not stylistic: reasoning
+  // is ours to drop, and an opaque field the provider put on a call is not.
+  //
   // An assistant message with neither content nor tool calls is refused,
   // because it poisons the conversation permanently. Providers reject it --
   // "invalid message provided at index 1: must have non-empty content" -- and
@@ -50,6 +56,9 @@ export class Conversation {
     const message = { role: 'assistant', content: content || null };
     if (toolCalls.length > 0) {
       message.tool_calls = toolCalls.map((c) => ({
+        // Spread first, so a provider field can never overwrite the three we
+        // are responsible for.
+        ...(c.extra ?? {}),
         id: c.id,
         type: 'function',
         function: { name: c.name, arguments: c.arguments },

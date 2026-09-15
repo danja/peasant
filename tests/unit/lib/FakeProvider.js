@@ -13,6 +13,9 @@ import http from 'node:http';
 const COMPLETION_PATHS = ['/chat/completions', '/messages', '/responses'];
 
 export class FakeProvider {
+  // Responses deliberately left unanswered, so stop() can free them.
+  #hung = [];
+
   #server;
   #port;
 
@@ -30,6 +33,7 @@ export class FakeProvider {
   //   { status, headers, json }              -- a non-streaming body
   //   { status, headers, sse }               -- raw SSE bytes or string
   //   { status, headers, chunks }            -- objects, framed as SSE for you
+  //   { hang: true }                         -- accept the request and never answer
   respond(spec) { this.#queue.push(spec); return this; }
 
   async start() {
@@ -41,6 +45,8 @@ export class FakeProvider {
 
   async stop() {
     if (!this.#server) return;
+    for (const res of this.#hung) res.destroy();
+    this.#hung.length = 0;
     await new Promise((resolve) => this.#server.close(resolve));
     this.#server = null;
   }
@@ -74,6 +80,16 @@ export class FakeProvider {
     const spec = this.#queue.shift() ?? { json: defaultCompletion() };
     const status = spec.status ?? 200;
     const headers = spec.headers ?? {};
+
+    // A provider that accepts the request and then says nothing. Two models in
+    // NVIDIA's catalogue behave exactly like this, and it is the case a caller
+    // with no timeout waits out forever. The socket is held open and tracked so
+    // stop() can close it; leaving it dangling would hang the test runner
+    // instead of the test, which is a worse version of the same bug.
+    if (spec.hang) {
+      this.#hung.push(res);
+      return;
+    }
 
     if (spec.sse !== undefined || spec.chunks !== undefined) {
       const payload = spec.sse !== undefined ? spec.sse : frameChunks(spec.chunks);

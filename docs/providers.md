@@ -1,10 +1,11 @@
 # Providers
 
 What the providers actually do, measured. Evidence in
-`raw/2026-09-12_providers/`; re-measure with `node bin/probe-providers.js`.
+`raw/2026-09-12_providers/` and `raw/2026-09-15_providers/`; re-measure with
+`node bin/probe-providers.js`, or one provider with `--only <name>`.
 
-Keyed as of 2026-09-12: **Groq**, **Mistral**, **Cerebras**, **OpenRouter**,
-**Google AI Studio**, **Hugging Face**. Unkeyed: NVIDIA, Together.
+Keyed as of 2026-09-15: **Groq**, **Mistral**, **Cerebras**, **OpenRouter**,
+**Google AI Studio**, **Hugging Face**, **NVIDIA**. Unkeyed: Together.
 
 | Provider | Chat | Streams | Rate-limit headers | Tool-call shape | Profile |
 |---|---|---|---|---|---|
@@ -13,16 +14,18 @@ Keyed as of 2026-09-12: **Groq**, **Mistral**, **Cerebras**, **OpenRouter**,
 | openrouter | 200 | yes | **none** | incremental | verified |
 | google | 200 | yes | **none** | whole in one delta | verified |
 | huggingface | 200 | yes | **none** | incremental | verified |
+| nvidia | 200 | yes | **none** | incremental | verified |
 | cerebras | **402** | never seen | **none** | unknown | unverified |
 
-**Five of six publish no usable rate-limit headers.** Only Groq says everything.
-That is the shape of the problem, and it is why the limiter treats `null` as
-unknown rather than empty, and why rotation is on by default.
+**Five of the seven publish no rate-limit headers at all.** Only Groq says
+everything and only Mistral says most of it. That is the shape of the problem,
+and it is why the limiter treats `null` as unknown rather than empty, and why
+rotation is on by default.
 
 ## The headline
 
 **Published free-tier figures are not to be trusted, and most providers publish
-no limits at runtime either.** Three of the four give the limiter nothing to
+no limits at runtime either.** Five of the seven give the limiter nothing to
 steer by. This is the whole justification for treating a rate limit as something
 read from a response rather than written in a config file — and for the limiter
 distinguishing *unknown* from *empty*, because for most providers unknown is the
@@ -57,8 +60,8 @@ The window is stated only in the header *name*, so the profile carries
 `impliedWindowMs: 60_000` and the budget is held more conservatively than Groq's
 despite being 78× larger. Mistral alone reports what a query cost.
 
-**OpenRouter and Cerebras publish nothing.** Their budget is discovered only
-from 429s.
+**OpenRouter, Cerebras, Google, Hugging Face and NVIDIA publish nothing.** Their
+budget is discovered only from 429s.
 
 ## Mistral: measured twice, different answers
 
@@ -142,7 +145,133 @@ One caveat about model quality rather than dialect: the free
 `cohere/north-mini-code:free` called `get_weather` with `{}` despite `city`
 being required. Assembly was correct; the model was not.
 
+## Google: `thought_signature` must be echoed back, and peasant throws it away
+
+Measured 2026-09-15. **This is why a tool-using session against Gemini fails on
+its second turn.** The first turn works and produces a tool call; sending the
+tool's result back produces:
+
+```
+HTTP 400  INVALID_ARGUMENT
+"Function call is missing a thought_signature in functionCall parts. This is
+ required for tools to work correctly, and missing thought_signature may lead to
+ degraded model performance. Additional data, function call `default_api:read`,
+ position 2."
+```
+
+Gemini 3.x attaches an opaque signature to every function call it makes and
+requires it back, unchanged, when the conversation continues. It arrives on the
+tool call itself, not on the message:
+
+```json
+"tool_calls": [{
+  "extra_content": { "google": { "thought_signature": "ErsCCrgCARFNMg9Z3Rvn…" } },
+  "function": { "name": "read", "arguments": "{\"path\":\"notes.txt\"}" },
+  "id": "call_199891", "type": "function"
+}]
+```
+
+peasant discards it twice over. `ToolCallAssembler.push()` reads `id`, `type`,
+`function.name` and `function.arguments` and nothing else; `Conversation.assistant()`
+then rebuilds the message from `{id, type, function}` alone. Either would be
+enough to lose it.
+
+**The evidence has been in this repository since the day Google was first
+probed.** `docs/raw/2026-09-12_providers/google-tools.sse`, first line, carries
+`extra_content.google.thought_signature` on the tool-call delta. It was
+captured, committed, and never read by anything.
+
+**The probe could not have caught it.** `probe-providers.js` sent one request
+and read the answer; it contained no `role: 'tool'` message anywhere. It proved
+a tool call *arrives* and never that a conversation can continue past one, which
+is the only thing a harness actually needs. It now answers its own tool call and
+captures the result as `<provider>-turn2.sse`, rebuilding the assistant turn the
+way `Conversation` does rather than by hand — because the question that turn
+asks is not what the provider sent, it is whether what peasant sends back is
+accepted. The report says plainly which provider fields were echoed.
+
+**Fixed 2026-09-15 by keeping what we do not understand.** `ToolCallAssembler`
+now collects every field on a tool call that is not one of the four it
+interprets into `extra`, and `Conversation.assistant()` spreads that back onto
+the message it sends — before `id`, `type` and `function`, so a provider field
+can never overwrite the three peasant is responsible for. Nothing names Google:
+the rule is that an opaque field a provider attached to a call is the provider's,
+and goes back untouched. Reasoning is still dropped, because that one is ours.
+
+`tests/unit/provider-extras.test.js` asserts the property end to end, including
+against the real captured Google bytes, and one of its tests walks every tool
+capture on disk and fails if any provider field goes missing between the
+response and the next request — the test that would have caught this on
+2026-09-12.
+
+**Not yet confirmed against live Gemini**, for want of quota rather than want of
+trying: the investigation exhausted the free tier. Everything checkable without
+Google is checked, and a second turn now works live on NVIDIA and Groq.
+
+## Google's free tier is five requests a minute, and says so only in the body
+
+Measured 2026-09-15 while re-probing:
+
+```
+HTTP 429  RESOURCE_EXHAUSTED
+"Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests,
+ limit: 5, model: gemini-3.5-flash. Please retry in 46.547714954s."
+```
+
+Five requests per minute, an order of magnitude tighter than the token limits
+that dominate elsewhere — on Google the request count is what runs out first.
+
+Two things the limiter cannot currently use. There is still **no
+`x-ratelimit-*` header and no `retry-after`**, so the figure exists only in
+English prose inside the error message. And peasant's default backoff for a 429
+without `retry-after` is 20 seconds (`PEASANT_BACKOFF_MS`), while Google asked
+for **46.5** — so the retry arrives while still exhausted and spends another
+request learning that.
+
+## Google: the preferred model is the one under load
+
+Measured 2026-09-15, five requests each, after a 503 was reported in normal use:
+
+| Model | Succeeded |
+|---|---|
+| `models/gemini-3.8-flash` | **2 of 5** |
+| `models/gemini-3.5-flash` | 5 of 5 |
+| `models/gemini-3.5-flash-lite` | 5 of 5 |
+
+```
+HTTP 503  "This model is currently experiencing high demand. Spikes in demand
+           are usually temporary. Please try again later."  status: UNAVAILABLE
+```
+
+Nothing is wrong with the key, the account or the request: `gemini-3.8-flash` is
+Google's newest flash model and the busiest, and it is the model this profile
+prefers first. The two that answer every time are the next two entries in the
+same `prefer` list.
+
+Two things follow, both recorded in `TODO.md`.
+
+**A 503 rotates the provider, not the model.** `selectModel` runs once at connect
+time and nothing revisits it, so peasant abandons Google entirely rather than
+trying the next preference — with `PEASANT_PROVIDERS=google` alone that is the
+end of the session. The alternatives are already listed; only availability is
+missing, and the 503 is the provider supplying it.
+
+**A slow failure is worse than a fast one.** Two of three streamed requests to
+the unwell model returned 503 in about a second. The third accepted the
+connection and sent nothing for 90 seconds, ending only because the probe set
+its own deadline. peasant sets none on the provider path, so `peasant ask` hung
+past two minutes.
+
+Until either is addressed, `GEMINI_MODEL=models/gemini-3.5-flash` is the remedy.
+
 ## Model choice is where the failures are
+
+**`peasant doctor` now asks.** Every failure below was found by hand, one
+provider at a time, and the fifth was found only by accident. The check lives in
+`src/provider/tool-check.js` and runs by default: it sends each provider's
+selected model one trivial tool call and reports whether it came back with
+arguments matching the schema the model was shown. `--no-tool-check` skips it;
+it costs about 200 tokens per provider.
 
 Every provider that failed on first contact failed because of the *model*, not
 the transport. All four were caught by `selectModel` refusing or by the probe,
@@ -163,6 +292,10 @@ and all four preference lists had been written from documentation:
   and named what was on offer, which is what it exists for.
 - **OpenRouter** matched `/:free$/` against an alphabetically-first *vision*
   model. Free does not mean suitable.
+- **NVIDIA** matched `/llama-3\.[13]/` against
+  `nvidia/llama-3.1-nemoguard-8b-content-safety` — a **guardrail classifier** —
+  and sent it a coding conversation. See the NVIDIA section below; it is the
+  worst of the five because nothing failed. The model answered.
 
 The general lesson: a preference list written from documentation is a guess with
 a long shelf life. `selectModel` refusing rather than falling back to "the first
@@ -392,6 +525,82 @@ never arrive and report a budget nobody measured.
 The model preferences *are* measured, from the 11-entry catalogue: Sonnet 5
 first, deliberately not the largest model available, because this bills per token
 and a harness makes hundreds of small tool-calling turns.
+
+## NVIDIA, with an API key
+
+Added 2026-09-15, measured. The profile had existed since 2026-09-12 as a set of
+assumptions from the OpenAI convention, marked `UNVERIFIED` because there was no
+key to test it with. A key arrived; two of the assumptions were wrong.
+
+### What answered
+
+| Request | Result |
+|---|---|
+| `GET /v1/models` | **200**, 81 models, 247 ms |
+| `POST /v1/chat/completions`, `openai/gpt-oss-20b` | **200**, streams, tool args valid JSON |
+| `POST /v1/chat/completions`, `nvidia/nemotron-3-super-120b-a12b` | **200**, streams, tool args valid JSON |
+| the other five models tried | **404** or a 150-second timeout |
+
+`stream_options: {include_usage: true}` is honoured. Tool arguments arrive
+**incrementally** on gpt-oss-20b (six deltas) and whole in one delta on
+nemotron-3-super, so one provider exhibits both shapes.
+
+### The catalogue is a shelf, not an inventory
+
+`/v1/models` lists **81** models. This account can call almost none of them.
+Four of the seven tried answered:
+
+```json
+{"status":404,"title":"Not Found",
+ "detail":"Function '<uuid>': Not found for account '<id>'"}
+```
+
+That is a statement about the *account*, not about our request, and it is the
+same trap as Anthropic's credit-balance 400 one section above. `classify()` maps
+404 to `bad-request`, which is **not retryable**, so the router would have
+stopped the session dead rather than rotating to a provider that would have
+answered. The profile now names the refusal in `unavailableWhen`, which is the
+extension point that already existed for exactly this — data in `profiles/`,
+no branch in the client.
+
+Two more timed out entirely: `moonshotai/kimi-k3` and
+`deepseek-ai/deepseek-v4-flash-0731` both returned nothing at 45 s and nothing
+again at 150 s. Listed, not refused, just never answering — which for the router
+is worse than a 404, because a timeout costs the wall-clock before it costs
+anything else.
+
+### A loose preference pattern selected a guardrail
+
+The unverified profile preferred `/qwen.*coder/i`, then `/llama-3\.[13]/i`, then
+`/nemotron/i`. This catalogue contains no Qwen at all, so the second pattern
+decided it, and the alphabetically-first match is:
+
+```
+nvidia/llama-3.1-nemoguard-8b-content-safety
+```
+
+A **content-safety classifier**, selected as the chat model for a coding
+harness. It returned HTTP 200 with a 402-token prompt overhead and eight tokens
+of output, so nothing looked broken; the streaming probe then hung until the
+60-second timeout. Had it been slightly more cooperative this would have shipped.
+
+This is the sharpest version of the warning already in `selectModel` — the one
+about Groq's Arabic text-to-speech model — and the reason there is no final
+"first one in the list" fallback. NVIDIA's catalogue is a model *zoo*:
+guardrails, reward models, document parsers, translators, a deepfake detector
+and a CLIP encoder all sit under the same listing as the chat models. The
+profile's `prefer` entries are now **anchored to exact ids that were measured
+answering**, and `nonChat` names the zoo.
+
+### Not measured
+
+**No `*-ratelimit-*` header appeared on any response**, streamed or not, on
+`/models` or on `/chat/completions`. The profile names none. NVIDIA sells
+credits rather than metering a free tier, so the thing that eventually stops the
+provider is a balance, and the balance is not published on a response header.
+
+`autoEnable` stays **false**: credits run out, and a provider that works until it
+abruptly does not belongs where someone put it deliberately.
 
 ## Subscription endpoints — Claude Code and Codex
 

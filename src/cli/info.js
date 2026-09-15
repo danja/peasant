@@ -9,9 +9,14 @@ import { estimateRequest } from '../agent/TokenEstimator.js';
 import { specs } from '../tools/registry.js';
 import { systemPrompt } from '../agent/prompt.js';
 import { loadContext, renderContext } from '../agent/context-files.js';
+import { checkToolCall, OUTCOMES } from '../provider/tool-check.js';
 
-export async function providers(term, env, { signal } = {}) {
-  const { clients, failed, skipped, prefs, router } = await build(term, env, { signal, mcp: false });
+// `built` lets a caller that has already connected pass the result in. `doctor`
+// needs the same clients twice -- once to ask them for a tool call, once to
+// list them -- and connecting twice would mean two catalogue round trips to say
+// the same thing.
+export async function providers(term, env, { signal, built = null } = {}) {
+  const { clients, failed, skipped, prefs, router } = built ?? await build(term, env, { signal, mcp: false });
 
   term.line(prefs.rotate
     ? term.paint(`rotation on — a blocked provider is skipped after ${prefs.maxWaitMs} ms; order below is preference order`, 'grey')
@@ -57,7 +62,43 @@ export async function models(term, env, { signal } = {}) {
   return 0;
 }
 
-export async function doctor(term, env, pkg, { signal } = {}) {
+// Asks each provider's selected model to make one tool call.
+//
+// This is the only part of `doctor` that spends tokens, and it is on by default
+// anyway. A check that must be remembered is a check that will not be run, and
+// the failure it catches is silent: NVIDIA's profile selected a content-safety
+// classifier and got HTTP 200 for it. The cost is one trivial call per
+// provider, and the total is printed so nobody has to guess what it came to.
+async function toolCheck(term, clients, signal, timeoutMs) {
+  term.line(term.paint('tool calls', 'bold'));
+  if (clients.length === 0) {
+    term.line(term.paint('  no provider has a key, so nothing to ask', 'grey'));
+    term.line('');
+    return;
+  }
+
+  let spent = 0;
+  for (const client of clients) {
+    const r = await checkToolCall(client, { signal, timeoutMs });
+    spent += r.usage?.total_tokens ?? 0;
+    const label = `  ${client.name.padEnd(12)}`;
+    if (r.outcome === 'ok') {
+      term.line(term.paint(`${label}ok    ${r.model} — ${r.detail} (${r.ms} ms)`, 'grey'));
+    } else {
+      // Named loudly, because the symptom otherwise arrives mid-task as a model
+      // that will not use its tools and no explanation of why.
+      term.line(term.paint(`${label}FAIL  ${r.model} — ${OUTCOMES[r.outcome]}`, 'yellow'));
+      term.line(term.paint(`${' '.repeat(label.length)}      ${r.detail}`, 'yellow'));
+      term.line(term.paint(
+        `${' '.repeat(label.length)}      a coding harness needs tool calls; set ${client.profile.modelVar}`
+        + ' to another model, or run `peasant models` to see what is on offer', 'yellow'));
+    }
+  }
+  term.line(term.paint(`  ${spent} tokens spent asking`, 'grey'));
+  term.line('');
+}
+
+export async function doctor(term, env, pkg, { signal, toolCheck: wanted = true } = {}) {
   term.line(term.paint('runtime', 'bold'));
   term.line(`  node ${process.version}, required ${pkg.engines.node}`);
   term.line('  run `node bin/probe-runtime.js` for the full check');
@@ -104,5 +145,10 @@ export async function doctor(term, env, pkg, { signal } = {}) {
     }
   }
   term.line('');
-  return providers(term, env, { signal });
+
+  const built = await build(term, env, { signal, mcp: false });
+  // Before the provider list rather than after it, so a FAIL is not the thing
+  // scrolled off the top.
+  if (wanted) await toolCheck(term, built.clients, signal, built.prefs.toolCheckTimeoutMs);
+  return providers(term, env, { signal, built });
 }

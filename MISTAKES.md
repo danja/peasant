@@ -2,6 +2,106 @@
 
 Newest first. What happened, the root cause, and what now prevents it.
 
+## 2026-09-15 — Gemini's `thought_signature` was captured on day one and read by nothing
+
+**What happened.** A tool-using session against Google fails on its second turn
+with `400 INVALID_ARGUMENT`:
+
+```
+Function call is missing a thought_signature in functionCall parts. This is
+required for tools to work correctly ... function call `default_api:read`,
+position 2.
+```
+
+Reported by the user as an intermittent 400 after switching models to dodge a
+503. It is not intermittent: `peasant ask` has no tools and always works,
+`peasant run` has tools and always fails on the turn that returns a tool result.
+"Sometimes" was the difference between two commands, not two attempts.
+
+**Root cause.** Gemini 3.x attaches an opaque `thought_signature` to every
+function call and requires it back unchanged. It arrives *on the tool call*, as
+`extra_content.google.thought_signature`. peasant discards it twice:
+`ToolCallAssembler.push()` reads only `id`, `type`, `function.name` and
+`function.arguments`, and `Conversation.assistant()` then rebuilds the message
+from `{id, type, function}`. Either alone would lose it.
+
+**The part worth remembering.** The proof was already in the repository. The
+first line of `docs/raw/2026-09-12_providers/google-tools.sse` — captured,
+committed and read by the test suite ever since — contains the signature in
+full. Five tests run against that file on every `npm test` — three in
+`sse-parser.test.js`, which parses it and asserts the events round-trip, and two
+in `tool-call-assembler.test.js`, which asserts the arguments survive assembly.
+Not one of them looks at a field it was not already expecting, so a capture can
+carry a mandatory field for three days while the suite is green.
+
+A recorded response is evidence of what the provider *sends*, and the tests only
+ever asked whether we could read the parts we already knew about. **Nothing
+compares a capture against what we consume**, so anything a provider adds is
+invisible until it becomes mandatory.
+
+**Why the probe could not catch it either.** `bin/probe-providers.js` sends one
+request and reads the answer. It contains no `role: 'tool'` message at all — it
+proves a tool call *arrives*, and has never once proved a conversation can
+continue past one. The whole failure lives in turn two, and nothing in the
+project has ever exercised turn two against a real provider.
+
+**Prevention.** All three built the same day. `ToolCallAssembler` collects every
+field it does not interpret into `extra`; `Conversation.assistant()` spreads it
+back onto the outgoing message, before `id`/`type`/`function` so a provider
+field cannot overwrite them; and `probe-providers.js` now answers its own tool
+call, so `docs/raw/` gains a `<provider>-turn2.sse` and a second turn finally
+exists to test against.
+
+The test that matters is in `tests/unit/provider-extras.test.js`: it walks every
+tool capture on disk, assembles each call, builds the message peasant would send
+next, and fails if any provider field went missing in between. That is the
+general form of the bug rather than this instance of it, and it would have
+failed on 2026-09-12.
+
+**The rule, stated once:** an opaque field a provider attached to a tool call
+belongs to the provider and goes back untouched. Reasoning is the deliberate
+exception, because that one is ours to drop — it is our own cost, no provider
+requires it echoed, and it is most of the token bill.
+
+## 2026-09-15 — A single-provider probe blanked the test suite's evidence
+
+**What happened.** `node bin/probe-providers.js --only nvidia` wrote a fresh
+`docs/raw/2026-09-15_providers/` containing two NVIDIA captures. Four unrelated
+tests in `client.test.js` and `tool-call-assembler.test.js` immediately failed,
+one of them with a bare `ENOENT` on `mistral-stream.sse` — a file that had not
+been touched and was still sitting on disk in the September 12th directory.
+
+**Root cause.** `tests/unit/lib/fixtures.js` resolved captures by *directory*:
+
+```js
+// Newest capture directory wins, so adding a fresh probe run updates the tests.
+return path.join(RAW, dirs[dirs.length - 1]);
+```
+
+The comment's intent is right — re-probing should update the tests rather than
+leave them asserting against a shape no provider produces any more. The
+implementation assumed every probe run covers every provider. `--only` exists
+precisely so that it does not, and the two facts lived in files that had no
+connection to each other: the probe grew a flag, the loader never heard.
+
+The failure message points away from the cause. It names a missing Mistral
+fixture, so it reads as a problem with Mistral, with the September 12th
+directory, or with `.gitignore` excluding a fixture — the last of which CLAUDE.md
+explicitly warns about. None of the three had anything to do with it, and the
+file it named had not been touched.
+
+**Prevention.** The loader now indexes every capture directory by *filename*,
+newest run of each file winning, so a run that did not ask about Mistral says
+nothing about Mistral. `tests/unit/fixtures.test.js` is new and asserts the
+property directly: every `.sse` on disk is visible to the loader, and at least
+two providers are represented. Previously this was only testable by noticing
+four other tests break for a reason that pointed elsewhere.
+
+**The general shape**, and it is the one CLAUDE.md names: a rule of the form
+"the newest X wins" is safe only when every X covers the same ground. `--only`
+made the runs uneven and nothing complained. Added as a row to the recurring
+failure table.
+
 ## 2026-09-15 — The permission prompt echoed every keypress twice
 
 **What happened.** Answering `allow? [y]es / [n]o / [a]lways:` with `y` printed

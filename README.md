@@ -137,8 +137,8 @@ halfway through, without the user doing anything.
 **No rate limit is ever a constant here.** Every published figure for these
 tiers turned out to be wrong — Groq documents 6,000 tokens a minute and reports
 8,000 — so limits are read from `x-ratelimit-*` response headers, whose names
-differ per provider and which five of the six hosted providers do not send at
-all. See [`docs/providers.md`](docs/providers.md).
+differ per provider and which five of the seven hosted providers measured so far
+do not send at all. See [`docs/providers.md`](docs/providers.md).
 
 ## Token economy
 
