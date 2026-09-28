@@ -459,6 +459,25 @@ Two rules bend for them, both deliberately and both enforced:
 They will be slow on an Athlon II. That is a trade made knowingly, and it is the
 only option that works with no network at all.
 
+### Ollama truncates silently, and its catalogue cannot warn you
+
+Added 2026-09-28, from Ollama's documentation and write-ups rather than a
+measurement. Ollama's OpenAI-compatible endpoint has **no request field for the
+context size**. The size is a server setting — `num_ctx` in a Modelfile, or
+`OLLAMA_CONTEXT_LENGTH` when the server starts — defaulting to 4,096 tokens on a
+machine without a large GPU. Past it, Ollama drops the *start* of the
+conversation without an error. Peasant's fixed cost is 942 tokens a turn
+before anything is said, so that is about four turns.
+
+`/v1/models` reports no window either (its entries are `id`, `object`,
+`created`, `owned_by`), so the budget knew nothing, `shouldCompact()` was
+permanently false, and nothing stood between a long session and silent
+truncation. The `ollama` profile now reads `OLLAMA_CONTEXT_LENGTH` — the same
+variable the server reads — and `llamacpp` reads `LLAMA_ARG_CTX_SIZE`, which
+`llama-server` takes in place of `-c`. A stated window wins over anything a
+catalogue says. A malformed value is an error: read as unset, it would switch
+compaction off again.
+
 ## Open questions
 
 - Which model to default to per provider. `mistral-vibe-cli-with-tools` and
@@ -694,6 +713,22 @@ currently send.
 
 ## OpenCode Zen — Muse Spark 1.3, free for training data
 
+**Measured 2026-09-28: the free model refuses peasant.**
+
+```
+opencode withdrawn for this session: opencode: stream failed (HTTP 403):
+OpenCode's free tier can only be used from within OpenCode
+```
+
+The router retired it for the session as a 403 should. The refusal is a policy,
+not a bug, and imitating OpenCode's client to get past it is not something
+peasant will do. The profile stays for Zen's paid models, none of which has been
+tried. Muse Spark 1.3 is also sold on OpenRouter
+(`meta/muse-spark-1.3-contributor`) and through Meta's own Model API; neither is
+free.
+
+Everything below was written before that measurement.
+
 Added 2026-09-28 as the `opencode` profile. **Nothing here has been measured**:
 `opencode.ai` was unreachable from the session that wrote it, so the profile
 comes from third-party write-ups and two opencode bug reports, not a capture.
@@ -718,3 +753,44 @@ That `/responses` answers with this key and model; whether any rate-limit
 headers come back; whether streamed tool calls arrive in the event shapes the
 `responses` dialect expects (it is itself unverified against a live endpoint);
 and whether #47192 — 1.3 also 500ing via API key — still holds.
+
+## Free tiers surveyed 2026-09-28
+
+A search for free tiers better than the ones above. **Nothing in this section
+has been measured**: every endpoint named was unreachable from the session that
+wrote it, so the figures are third-party (chiefly the `mnfst/awesome-free-llm-apis`
+list, whose entries cite live probes from August 2026). Treat each as a lead.
+
+### What changed under the existing profiles
+
+Reported, not measured here:
+
+- **Cerebras** replaced its free tier with a $5, 30-day trial needing a card
+  on 2026-07-16. That fits the 402 recorded above.
+- **Together** now requires a $5 purchase.
+- **Groq** dropped `llama-3.3-70b-versatile` and `llama-3.1-8b-instant` on
+  2026-08-16. The profile never preferred either.
+- **OpenRouter** free models are 50 requests a day each until $10 of credit is
+  bought, then 1,000.
+
+### Added as profiles, all unverified and off by default
+
+| Profile | Free offer | Why it is here |
+|---|---|---|
+| `kilo` | `:free` models with **no key**, 200 requests/hour per IP | Four times OpenRouter's daily free allowance, per hour, and the same coding models (Poolside Laguna, Cohere North Mini Code, Nemotron 3) |
+| `ollama-cloud` | DeepSeek V4, Kimi K3, Qwen 3.5 397B, gpt-oss 120b; limits per 5-hour session and per week, unpublished | The largest open models on any free tier, with no local server needed |
+| `zai` | GLM-4.7-Flash, 200K context, tool calls; one request at a time | Free outright rather than credit, and throttled by concurrency, not tokens, which suits one call per turn |
+
+The terms differ: Kilo warns that free requests may go to providers that log
+prompts. Google's and Mistral's free tiers already allow training on prompts
+(Mistral unless you opt out).
+
+### Considered and not added
+
+- **Cloudflare Workers AI**: 10,000 "neurons" a day, which is small for a
+  harness, and the account id goes in the URL path, which the profile shape
+  does not support.
+- **OVHcloud AI Endpoints**: no key needed, but 2 requests a minute.
+- **ModelScope, SiliconFlow**: need real-name identity verification.
+- **Cohere trial key**: 1,000 calls a month, non-commercial only.
+- **GitHub Models**: retired 2026-07-30.

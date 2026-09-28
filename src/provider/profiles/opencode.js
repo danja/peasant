@@ -4,6 +4,11 @@ import { defineProfile } from './generic.js';
 // Written 2026-09-28 from third-party write-ups and opencode's issue tracker,
 // not measured. Nothing in docs/raw/ stands behind any of it.
 //
+// MEASURED 2026-09-28, and it undoes the point of this profile: the free model
+// answers 403 "OpenCode's free tier can only be used from within OpenCode".
+// That is a policy, not a bug, and peasant does not impersonate OpenCode to
+// get past it. The profile remains for Zen's paid models, none yet tried.
+//
 // OpenCode Zen, the model gateway run by the OpenCode project. It is here for
 // one model, `muse-spark-1.3-contributor-free`: free, 1M context, and free
 // because the prompts and completions are handed over as training data. That

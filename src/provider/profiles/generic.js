@@ -26,6 +26,14 @@ export const GENERIC = {
   baseUrlVar: null,
   modelVar: null,
 
+  // The environment variable holding the context window actually in force,
+  // for a server where that is a setting of the server rather than a property
+  // of the model -- which no catalogue reports. Named after the variable the
+  // server itself reads, so one line in the environment configures both. null
+  // for every provider whose catalogue says, or says nothing that a setting
+  // here could make true.
+  contextWindowVar: null,
+
   // A local server has no account and no key. Its keyVar still exists, because
   // some local front-ends accept one, but an empty value is not a reason to
   // consider the provider unusable.

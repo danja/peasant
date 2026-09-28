@@ -33,7 +33,7 @@ test('every profile names its settings in example.env', () => {
   // A provider nobody can configure is a provider nobody will use.
   const missing = [];
   for (const p of PROFILES) {
-    for (const v of [p.keyVar, p.baseUrlVar, p.modelVar]) {
+    for (const v of [p.keyVar, p.baseUrlVar, p.modelVar, p.contextWindowVar].filter(Boolean)) {
       if (!exampleEnv.includes(v)) missing.push(`${p.name}: ${v}`);
     }
   }

@@ -7,12 +7,34 @@ changes the other.
 
 Kept current at the end of any session that changes it.
 
+## Three new free providers — each needs one run to verify
+
+Added 2026-09-28 (`docs/providers.md`, "Free tiers surveyed"). None could be
+reached from the session that wrote them. `peasant doctor` sends each one a
+trivial tool call, which is the check that matters.
+
+- [ ] **`kilo` needs no key at all.** Add `kilo` to `PEASANT_PROVIDERS` and run
+      `peasant doctor`. If it answers, it is the best free source of coding
+      models here: 200 requests an hour against OpenRouter's 50 a day.
+- [ ] **`ollama-cloud`**: an account at ollama.com, `OLLAMA_CLOUD_API_KEY`. If
+      `selectModel` refuses, the model ids listed differ from the ones in the
+      profile. It names what is listed, so fixing it is a one-line edit.
+- [ ] **`zai`**: a key from z.ai, `ZAI_API_KEY`. If connecting fails while
+      listing models, set `ZAI_MODEL=glm-4.7-flash`.
+- [ ] **If you run Ollama, set `OLLAMA_CONTEXT_LENGTH`** for both the server and
+      peasant. Without it the server cuts the start of the conversation at 4,096
+      tokens, which is about four turns.
+- [ ] **Cerebras and Together are reportedly no longer free.** Worth checking
+      your accounts before either stays in `PEASANT_PROVIDERS`.
+
 ## OpenCode Zen — needs a key and a first capture
 
 Added as the `opencode` profile 2026-09-28, for the free
 `muse-spark-1.3-contributor-free` model. Unverified; see `docs/providers.md`.
 
-- [ ] **Get a key** at https://opencode.ai/zen and set `OPENCODE_API_KEY`.
+- [x] ~~**Get a key**~~: done. The free model answers **403, "OpenCode's free
+      tier can only be used from within OpenCode"** (2026-09-28). The free
+      tier is closed to peasant; only a paid Zen model could work.
 - [ ] **Decide whether the terms are acceptable.** It is free because prompts
       and completions — file contents included — become training data. It is
       off unless `opencode` is added to `PEASANT_PROVIDERS`.

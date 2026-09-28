@@ -9,8 +9,11 @@ import { Router } from './Router.js';
 import { preferences } from '../config/preferences.js';
 
 // The catalogue field naming a context window, where a provider publishes one.
-// OpenRouter and Ollama do; Groq, Mistral, Google and Hugging Face do not, so
-// null is the normal answer and must stay distinguishable from zero.
+// OpenRouter does; Groq, Mistral, Google and Hugging Face do not, so null is the
+// normal answer and must stay distinguishable from zero. Nor does a local
+// Ollama: its /v1/models entry is id, object, created and owned_by, and its
+// window is a server setting (num_ctx) no catalogue could report -- which is
+// what a profile's contextWindowVar is for.
 //
 // One list, and it has to be complete: a provider that publishes a window under
 // a name missing from here reads as publishing none, and a null window means
@@ -62,7 +65,9 @@ export async function connect(env, { signal, onProgress = () => {} } = {}) {
         const details = await client.listModelDetails({ signal });
         const ids = details.map((m) => m.id ?? m.name).filter(Boolean);
         config.model = selectModel(config.profile, ids, null);
-        config.contextWindow = windowOf(details, config.model);
+        // A window the user stated wins: for a local server it is the only
+        // true one, where a catalogue could at best give the model's maximum.
+        config.contextWindow ??= windowOf(details, config.model);
       }
       // The same client, not a new one built from the same config.
       //

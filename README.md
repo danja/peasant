@@ -109,12 +109,16 @@ function is one turn rather than eight.
 
 ## Providers
 
-Thirteen profiles. Ten speak the OpenAI chat-completions shape: Groq, Mistral,
-Cerebras, OpenRouter, Google AI Studio, Hugging Face, NVIDIA, Together, and
-local Ollama and llama.cpp. Anything else speaking that shape works too; adding
-one is a file.
+Seventeen profiles. Thirteen speak the OpenAI chat-completions shape: Groq,
+Mistral, Cerebras, OpenRouter, Google AI Studio, Hugging Face, NVIDIA, Together,
+Ollama Cloud, the Kilo gateway, Z.ai, and local Ollama and llama.cpp. Anything
+else speaking that shape works too; adding one is a file. Ollama Cloud, Kilo and
+Z.ai were added from documentation and are **unverified**; Kilo needs no key.
 
-Three do not. `anthropic` speaks the Anthropic Messages format with an ordinary
+`opencode` (OpenCode Zen) speaks the OpenAI Responses format. Its free model
+refuses any client but OpenCode's own, so only Zen's paid models could work.
+
+Three more do not speak chat completions. `anthropic` speaks the Anthropic Messages format with an ordinary
 API key; `claude-code` reaches the same endpoint by borrowing the OAuth token
 Claude Code stores on this machine; `codex` speaks the OpenAI Responses format
 with the Codex CLI's token. None of the three is enabled unless you name it in

@@ -12,6 +12,11 @@ export default defineProfile({
   keyVar: 'LLAMACPP_API_KEY',
   baseUrlVar: 'LLAMACPP_BASE_URL',
   modelVar: 'LLAMACPP_MODEL',
+
+  // The window is whatever `llama-server -c` was given, which its catalogue
+  // does not report. LLAMA_ARG_CTX_SIZE is the variable llama-server reads in
+  // place of -c, so the same line configures both.
+  contextWindowVar: 'LLAMA_ARG_CTX_SIZE',
   requiresKey: false,
   autoEnable: false,
   verified: false,

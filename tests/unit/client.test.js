@@ -58,6 +58,20 @@ test('sends bearer auth and the configured model', async (t) => {
   });
 });
 
+test('sends no authorization header at all when there is no key', async (t) => {
+  // An empty "Bearer " is a malformed credential. A gateway serving anonymous
+  // requests may refuse it rather than treat the request as anonymous.
+  const fake = await new FakeProvider().start();
+  t.after(() => fake.stop());
+  const client = new ProviderClient({
+    profile: testProfile, name: 'fake', key: '', baseUrl: fake.baseUrl,
+    model: 'm', extraHeaders: {},
+  });
+  fake.respond({ json: defaultCompletion() });
+  await client.complete(ask);
+  assert.equal(fake.lastRequest.headers.authorization, undefined);
+});
+
 test('sends extra headers a profile supplies', async (t) => {
   const fake = await new FakeProvider().start();
   t.after(() => fake.stop());

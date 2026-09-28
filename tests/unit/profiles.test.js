@@ -179,3 +179,32 @@ test('openrouter sends attribution headers only when configured', () => {
   assert.deepEqual(or.headers({ OPENROUTER_SITE_URL: 'https://x', OPENROUTER_SITE_NAME: 'p' }),
     { 'http-referer': 'https://x', 'x-title': 'p' });
 });
+
+// --- a context window the server holds, not the catalogue --------------------
+
+test('a stated context window is read from the variable the server reads', () => {
+  assert.equal(configure(byName('ollama'), { OLLAMA_CONTEXT_LENGTH: '16384' }).contextWindow, 16384);
+  assert.equal(configure(byName('llamacpp'), { LLAMA_ARG_CTX_SIZE: '8192' }).contextWindow, 8192);
+});
+
+test('an unstated context window is null, not zero', () => {
+  // null keeps the budget's "unknown" meaning; zero would read as "nothing fits".
+  assert.equal(configure(byName('ollama'), {}).contextWindow, null);
+  assert.equal(configure(byName('ollama'), { OLLAMA_CONTEXT_LENGTH: '' }).contextWindow, null);
+  assert.equal(configure(groq, { GROQ_API_KEY: 'k' }).contextWindow, null);
+});
+
+test('a malformed context window is an error, not "unset"', () => {
+  // Read as unset it would switch compaction off, and Ollama would then cut the
+  // front of the conversation away without saying so.
+  for (const bad of ['16k', '0', '-1', '4096.5', 'lots']) {
+    assert.throws(() => configure(byName('ollama'), { OLLAMA_CONTEXT_LENGTH: bad }), /OLLAMA_CONTEXT_LENGTH/, bad);
+  }
+});
+
+test('a keyless hosted gateway is usable without a key', () => {
+  // Kilo serves its free models anonymously; a key is only for paid ones.
+  const kilo = configure(byName('kilo'), {});
+  assert.equal(kilo.usable, true);
+  assert.equal(kilo.key, '');
+});

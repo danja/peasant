@@ -14,6 +14,9 @@ import huggingface from './profiles/huggingface.js';
 import nvidia from './profiles/nvidia.js';
 import together from './profiles/together.js';
 import opencode from './profiles/opencode.js';
+import ollamaCloud from './profiles/ollama-cloud.js';
+import kilo from './profiles/kilo.js';
+import zai from './profiles/zai.js';
 import ollama from './profiles/ollama.js';
 import llamacpp from './profiles/llamacpp.js';
 import anthropic from './profiles/anthropic.js';
@@ -23,7 +26,7 @@ import { readCredential } from './Credentials.js';
 
 export const PROFILES = Object.freeze([
   groq, mistral, cerebras, openrouter, google, huggingface,
-  nvidia, together, opencode, ollama, llamacpp, anthropic, claudeCode, codex,
+  nvidia, together, opencode, ollamaCloud, kilo, zai, ollama, llamacpp, anthropic, claudeCode, codex,
 ]);
 
 export const PROFILE_NAMES = Object.freeze(PROFILES.map((p) => p.name));
@@ -77,8 +80,23 @@ export function configure(profile, env, deps = {}) {
     problem,
     baseUrl: env[profile.baseUrlVar] || profile.baseUrl,
     model: env[profile.modelVar] || null,
+    contextWindow: contextWindowOf(profile, env),
     extraHeaders,
   };
+}
+
+// A window the user has stated, or null. A value that is not a positive whole
+// number is peasant's own configuration being wrong, so it throws: read as
+// "unset" it would switch compaction off, and the conversation would grow
+// until the server silently cut the front of it away.
+function contextWindowOf(profile, env) {
+  if (!profile.contextWindowVar) return null;
+  const raw = (env[profile.contextWindowVar] ?? '').trim();
+  if (raw === '') return null;
+  if (!/^[1-9][0-9]*$/.test(raw)) {
+    throw new Error(`${profile.contextWindowVar}=${JSON.stringify(raw)}: expected a whole number of tokens`);
+  }
+  return Number(raw);
 }
 
 // Picks a model from what /models actually listed.

@@ -99,7 +99,10 @@ export class ProviderClient {
     const { profile, key, extraHeaders } = this.#config;
     if (profile.auth !== 'bearer') throw new Error(`unsupported auth scheme ${profile.auth}`);
     return {
-      authorization: `Bearer ${key}`,
+      // No key, no header. An empty `Bearer ` is a malformed credential, and a
+      // gateway serving anonymous requests may reject it as one rather than
+      // treat the request as anonymous.
+      ...(key === '' ? {} : { authorization: `Bearer ${key}` }),
       'content-type': 'application/json',
       accept: 'application/json',
       ...this.#dialect.headers({ profile }),

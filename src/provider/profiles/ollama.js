@@ -1,7 +1,8 @@
 import { defineProfile } from './generic.js';
 
-// UNVERIFIED: no local server has been probed from here, so no completion
-// from it has been inspected.
+// UNVERIFIED: `peasant ask` answered through it on 2026-09-12 (see
+// docs/providers.md, "Local models"), but no response was captured under
+// docs/raw/, so the claim has nothing behind it that a test can check.
 //
 // A local Ollama server. No key, no quota, no network, and no rate limit to
 // discover -- the only provider here that cannot refuse you.
@@ -17,6 +18,14 @@ export default defineProfile({
   keyVar: 'OLLAMA_API_KEY',
   baseUrlVar: 'OLLAMA_BASE_URL',
   modelVar: 'OLLAMA_MODEL',
+
+  // Ollama's OpenAI-compatible endpoint has no field for the context size, and
+  // past it the server drops the *start* of the conversation without a word --
+  // system prompt and tool schemas first. The default is 4,096 tokens on a
+  // machine without a large GPU, which is about four turns here. The server
+  // reads OLLAMA_CONTEXT_LENGTH at startup; setting the same variable here
+  // tells the budget what that is, so compaction happens before truncation.
+  contextWindowVar: 'OLLAMA_CONTEXT_LENGTH',
   requiresKey: false,
   autoEnable: false,
   verified: false,
