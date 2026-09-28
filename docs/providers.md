@@ -691,3 +691,30 @@ See `MAINTAINER.md`. In short: the credential files' actual shape, whether
 `/v1/models` answers an OAuth token, what `CODEX_MODEL` should be set to, and
 whether either endpoint requires anything of the request that peasant does not
 currently send.
+
+## OpenCode Zen — Muse Spark 1.3, free for training data
+
+Added 2026-09-28 as the `opencode` profile. **Nothing here has been measured**:
+`opencode.ai` was unreachable from the session that wrote it, so the profile
+comes from third-party write-ups and two opencode bug reports, not a capture.
+
+What is claimed, and what the profile assumes:
+
+- Base URL `https://opencode.ai/zen/v1`, Bearer key (`OPENCODE_API_KEY`).
+- Model `muse-spark-1.3-contributor-free`: free, 1,048,576-token context,
+  131,072 max output, text and image input.
+- **Responses API only.** The "contributor-free" Muse models are reported to
+  answer HTTP 500 on `/chat/completions` (anomalyco/opencode #45744 for 1.2,
+  #47192 for 1.3), so the profile uses the `responses` dialect. That dialect
+  has no models path, so the model is listed in the profile rather than read
+  from `/models`.
+- **The price is your data.** Prompts and completions are used to train
+  future Meta models. In a coding harness that means file contents. Hence
+  `autoEnable: false`.
+
+### What a first run has to confirm
+
+That `/responses` answers with this key and model; whether any rate-limit
+headers come back; whether streamed tool calls arrive in the event shapes the
+`responses` dialect expects (it is itself unverified against a live endpoint);
+and whether #47192 — 1.3 also 500ing via API key — still holds.

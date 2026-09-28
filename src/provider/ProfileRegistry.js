@@ -13,6 +13,7 @@ import google from './profiles/google.js';
 import huggingface from './profiles/huggingface.js';
 import nvidia from './profiles/nvidia.js';
 import together from './profiles/together.js';
+import opencode from './profiles/opencode.js';
 import ollama from './profiles/ollama.js';
 import llamacpp from './profiles/llamacpp.js';
 import anthropic from './profiles/anthropic.js';
@@ -22,7 +23,7 @@ import { readCredential } from './Credentials.js';
 
 export const PROFILES = Object.freeze([
   groq, mistral, cerebras, openrouter, google, huggingface,
-  nvidia, together, ollama, llamacpp, anthropic, claudeCode, codex,
+  nvidia, together, opencode, ollama, llamacpp, anthropic, claudeCode, codex,
 ]);
 
 export const PROFILE_NAMES = Object.freeze(PROFILES.map((p) => p.name));

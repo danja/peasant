@@ -7,6 +7,20 @@ changes the other.
 
 Kept current at the end of any session that changes it.
 
+## OpenCode Zen — needs a key and a first capture
+
+Added as the `opencode` profile 2026-09-28, for the free
+`muse-spark-1.3-contributor-free` model. Unverified; see `docs/providers.md`.
+
+- [ ] **Get a key** at https://opencode.ai/zen and set `OPENCODE_API_KEY`.
+- [ ] **Decide whether the terms are acceptable.** It is free because prompts
+      and completions — file contents included — become training data. It is
+      off unless `opencode` is added to `PEASANT_PROVIDERS`.
+- [ ] **Run the probe and capture a response**, so the profile can claim
+      `verified`. Reported bug anomalyco/opencode#47192 says 1.3 may answer
+      500 via API key; if so, the profile needs to know before anyone relies
+      on it.
+
 ## Anthropic API key — needs credit before it can do anything
 
 Added as the `anthropic` profile 2026-09-15, and your `.env` now points at it.
